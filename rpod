@@ -19,7 +19,11 @@
 #   NGPU=1               Number of GPUs (auto-detected if not set)
 #   MAX_WALLCLOCK_SECONDS=600   Training time cap
 
-set -euo pipefail
+set -uo pipefail
+# Note: not using -e so we can clean up timers on failure
+
+# Clean up timer on any exit (success, failure, Ctrl+C)
+trap 'stop_timer' EXIT INT TERM
 
 WORKDIR="$(cd "$(dirname "$0")" && pwd)"
 LOGDIR="$WORKDIR/experiments/run_logs"
@@ -225,6 +229,7 @@ cmd_smoke() {
     log "=== Smoke test (50 steps, ${GPUS}xGPU) ==="
     start_timer "Smoke test" "${MAX_WALLCLOCK_SECONDS:-300}"
 
+    local rc=0
     RUN_ID="ipa_smoke_${TIMESTAMP}" \
     DATA_PATH=./data/datasets/fineweb10B_ipa/ \
     TOKENIZER_PATH=./data/tokenizers/fineweb_1024_bpe.model \
@@ -235,9 +240,14 @@ cmd_smoke() {
     MAX_WALLCLOCK_SECONDS="${MAX_WALLCLOCK_SECONDS:-300}" \
     TRAIN_LOG_EVERY=10 \
     torchrun --standalone --nproc_per_node="$GPUS" train_gpt.py \
-        2>&1 | tee "$LOGFILE"
+        2>&1 | tee "$LOGFILE" || rc=$?
 
     stop_timer
+    if [ $rc -ne 0 ]; then
+        log "SMOKE TEST FAILED (exit code $rc). Log: $LOGFILE"
+        log "Check the log for the error: tail -30 $LOGFILE"
+        return $rc
+    fi
     log "Smoke test done. Log: $LOGFILE"
 }
 
@@ -249,6 +259,7 @@ cmd_train() {
     log "=== Full IPA training (${GPUS}xGPU, ${MAX_WALLCLOCK_SECONDS:-600}s) ==="
     start_timer "IPA training" "${MAX_WALLCLOCK_SECONDS:-600}"
 
+    local rc=0
     RUN_ID="ipa_full_${TIMESTAMP}" \
     DATA_PATH=./data/datasets/fineweb10B_ipa/ \
     TOKENIZER_PATH=./data/tokenizers/fineweb_1024_bpe.model \
@@ -259,9 +270,15 @@ cmd_train() {
     VAL_LOSS_EVERY=1000 \
     MAX_WALLCLOCK_SECONDS="${MAX_WALLCLOCK_SECONDS:-600}" \
     torchrun --standalone --nproc_per_node="$GPUS" train_gpt.py \
-        2>&1 | tee "$LOGFILE"
+        2>&1 | tee "$LOGFILE" || rc=$?
 
     stop_timer
+
+    if [ $rc -ne 0 ]; then
+        log "TRAINING FAILED (exit code $rc). Log: $LOGFILE"
+        log "Check the log: tail -30 $LOGFILE"
+        return $rc
+    fi
 
     [ -f "final_model.int8.ptz" ] && \
         cp final_model.int8.ptz "$ARTIFACTDIR/ipa_full_${TIMESTAMP}.int8.ptz"
@@ -277,15 +294,22 @@ cmd_baseline() {
     log "=== BPE baseline + sliding window (${GPUS}xGPU) ==="
     start_timer "Baseline" "${MAX_WALLCLOCK_SECONDS:-600}"
 
+    local rc=0
     RUN_ID="baseline_${TIMESTAMP}" \
     EVAL_STRIDE=64 \
     EVAL_BATCH_SEQS=1024 \
     VAL_LOSS_EVERY=1000 \
     MAX_WALLCLOCK_SECONDS="${MAX_WALLCLOCK_SECONDS:-600}" \
     torchrun --standalone --nproc_per_node="$GPUS" train_gpt.py \
-        2>&1 | tee "$LOGFILE"
+        2>&1 | tee "$LOGFILE" || rc=$?
 
     stop_timer
+
+    if [ $rc -ne 0 ]; then
+        log "BASELINE FAILED (exit code $rc). Log: $LOGFILE"
+        log "Check the log: tail -30 $LOGFILE"
+        return $rc
+    fi
 
     [ -f "final_model.int8.ptz" ] && \
         cp final_model.int8.ptz "$ARTIFACTDIR/baseline_${TIMESTAMP}.int8.ptz"
