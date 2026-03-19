@@ -1,0 +1,311 @@
+#!/bin/bash
+# rpod — One tool for all RunPod + git operations
+#
+# Usage:
+#   rpod setup          Pull branch, download data, run tests
+#   rpod pull            Pull latest code from fork
+#   rpod push            Commit logs and push to fork
+#   rpod sync            Sync fork with upstream (openai/parameter-golf)
+#   rpod status          Show git status, branch, GPU info
+#   rpod pr              Create a PR from current branch
+#
+#   rpod convert [N]     Phase 2: convert N shards to IPA (default: 1)
+#   rpod smoke           Phase 3: 50-step IPA training smoke test
+#   rpod train           Phase 4: full 10-min IPA training run
+#   rpod baseline        BPE baseline + sliding window eval
+#   rpod all             convert -> smoke -> convert-all -> train -> push
+#
+# Environment:
+#   NGPU=1               Number of GPUs (auto-detected if not set)
+#   MAX_WALLCLOCK_SECONDS=600   Training time cap
+
+set -euo pipefail
+
+WORKDIR="$(cd "$(dirname "$0")" && pwd)"
+LOGDIR="$WORKDIR/experiments/run_logs"
+ARTIFACTDIR="$WORKDIR/experiments/run_artifacts"
+TIMESTAMP=$(date +%Y%m%d-%H%M%S)
+BRANCH=$(git -C "$WORKDIR" branch --show-current 2>/dev/null || echo "unknown")
+
+mkdir -p "$LOGDIR" "$ARTIFACTDIR"
+cd "$WORKDIR"
+
+log() { echo "[$(date +%H:%M:%S)] $*"; }
+
+# Auto-detect GPU count
+detect_gpus() {
+    if [ -n "${NGPU:-}" ]; then
+        echo "$NGPU"
+    elif command -v nvidia-smi &>/dev/null; then
+        nvidia-smi -L 2>/dev/null | wc -l | tr -d ' '
+    else
+        echo "0"
+    fi
+}
+
+# ============================================================
+# GIT OPERATIONS
+# ============================================================
+
+cmd_pull() {
+    log "Pulling $BRANCH..."
+    git pull origin "$BRANCH"
+    log "Done."
+}
+
+cmd_push() {
+    log "Pushing logs to origin/$BRANCH..."
+
+    # Add log files
+    git add experiments/run_logs/*.log 2>/dev/null || true
+
+    # Add conversion metadata
+    git add data/datasets/fineweb10B_ipa/conversion_log.json 2>/dev/null || true
+    git add data/datasets/fineweb10B_ipa/total_original_bytes.txt 2>/dev/null || true
+
+    # Show what's staged
+    STAGED=$(git diff --cached --name-only 2>/dev/null | wc -l | tr -d ' ')
+
+    if [ "$STAGED" -eq 0 ]; then
+        log "Nothing new to push."
+        return
+    fi
+
+    echo "Staged $STAGED file(s):"
+    git diff --cached --name-only
+
+    git commit -m "results: RunPod logs $TIMESTAMP
+
+Co-Authored-By: Claude Opus 4.6 (1M context) <noreply@anthropic.com>"
+
+    git push origin "$BRANCH"
+    log "Pushed $STAGED file(s) to origin/$BRANCH"
+}
+
+cmd_sync() {
+    log "Syncing fork with upstream..."
+    gh repo sync nalediym/parameter-golf --source openai/parameter-golf --force
+    log "Sync complete."
+    git log --oneline -3
+}
+
+cmd_status() {
+    echo "=== rpod status ==="
+    echo "Branch:  $BRANCH"
+    echo "Commit:  $(git log --oneline -1)"
+    echo "Remote:  $(git remote get-url origin 2>/dev/null || echo 'none')"
+    echo ""
+
+    # Git status
+    local CHANGES=$(git status --short | wc -l | tr -d ' ')
+    echo "Changes: $CHANGES file(s)"
+    [ "$CHANGES" -gt 0 ] && git status --short
+
+    # Logs
+    local NLOGS=$(ls "$LOGDIR"/*.log 2>/dev/null | wc -l | tr -d ' ')
+    echo "Logs:    $NLOGS in experiments/run_logs/"
+
+    # GPU info
+    echo ""
+    if command -v nvidia-smi &>/dev/null; then
+        echo "GPUs:"
+        nvidia-smi -L 2>/dev/null || echo "  (nvidia-smi failed)"
+    else
+        echo "GPUs: none detected (local machine?)"
+    fi
+}
+
+cmd_pr() {
+    if [ "$BRANCH" = "main" ]; then
+        echo "Can't create PR from main. Switch to a feature branch first."
+        exit 1
+    fi
+    EXISTING=$(gh pr list --head "$BRANCH" --json number -q '.[0].number' 2>/dev/null || true)
+    if [ -n "$EXISTING" ]; then
+        echo "PR #$EXISTING already exists: $(gh pr view "$EXISTING" --json url -q .url)"
+    else
+        gh pr create --fill
+    fi
+}
+
+# ============================================================
+# SETUP
+# ============================================================
+
+cmd_setup() {
+    log "=== SETUP ==="
+    git fetch origin
+    git checkout "$BRANCH"
+    git pull origin "$BRANCH"
+
+    # Auth git via gh
+    gh auth setup-git 2>/dev/null || true
+
+    if [ ! -d "data/datasets/fineweb10B_sp1024" ]; then
+        log "Downloading FineWeb dataset..."
+        python3 data/cached_challenge_fineweb.py --variant sp1024
+    fi
+
+    log "Running tests..."
+    python3 tests/test_ipa_converter.py
+
+    local GPUS=$(detect_gpus)
+    log "Setup complete. GPUs detected: $GPUS"
+}
+
+# ============================================================
+# EXPERIMENT COMMANDS
+# ============================================================
+
+cmd_convert() {
+    local SHARDS="${1:-1}"
+    local LOGFILE="$LOGDIR/convert_${SHARDS}shards_${TIMESTAMP}.log"
+
+    log "=== Converting $SHARDS shard(s) to IPA ==="
+    log "Log: $LOGFILE"
+
+    python3 convert_fineweb_to_ipa_shards.py \
+        --shards "$SHARDS" \
+        --output-dir data/datasets/fineweb10B_ipa \
+        2>&1 | tee "$LOGFILE"
+
+    # Gate check
+    log "--- GATE CHECK ---"
+    python3 -c "
+import numpy as np
+from pathlib import Path
+
+out = Path('data/datasets/fineweb10B_ipa')
+shards = sorted(out.glob('fineweb_*.bin'))
+print(f'Shards: {len(shards)}')
+for s in shards:
+    h = np.fromfile(s, dtype='<i4', count=256)
+    assert h[0] == 20240520 and h[1] == 2, f'Bad header: {s.name}'
+    n, b = int(h[2]), int(h[3])
+    t = np.fromfile(s, dtype=np.uint8, count=n, offset=256*4)
+    sb = int(open(str(s).replace('.bin','.bytes')).read().strip())
+    assert sb == b, f'Byte count mismatch: {s.name}'
+    print(f'  {s.name}: {n:,} tokens, max_id={t.max()}, bytes={b:,} OK')
+print('GATE PASSED')
+" 2>&1 | tee -a "$LOGFILE"
+}
+
+cmd_smoke() {
+    local GPUS=$(detect_gpus)
+    [ "$GPUS" -eq 0 ] && GPUS=1
+    local LOGFILE="$LOGDIR/smoke_${TIMESTAMP}.log"
+
+    log "=== Smoke test (50 steps, ${GPUS}xGPU) ==="
+
+    RUN_ID="ipa_smoke_${TIMESTAMP}" \
+    DATA_PATH=./data/datasets/fineweb10B_ipa/ \
+    TOKENIZER_PATH=./data/tokenizers/fineweb_1024_bpe.model \
+    VOCAB_SIZE=127 \
+    TRAIN_SEQ_LEN=2048 \
+    ITERATIONS=50 \
+    VAL_LOSS_EVERY=0 \
+    MAX_WALLCLOCK_SECONDS="${MAX_WALLCLOCK_SECONDS:-300}" \
+    TRAIN_LOG_EVERY=10 \
+    torchrun --standalone --nproc_per_node="$GPUS" train_gpt.py \
+        2>&1 | tee "$LOGFILE"
+
+    log "Smoke test done. Log: $LOGFILE"
+}
+
+cmd_train() {
+    local GPUS=$(detect_gpus)
+    [ "$GPUS" -eq 0 ] && GPUS=1
+    local LOGFILE="$LOGDIR/train_ipa_${TIMESTAMP}.log"
+
+    log "=== Full IPA training (${GPUS}xGPU, ${MAX_WALLCLOCK_SECONDS:-600}s) ==="
+
+    RUN_ID="ipa_full_${TIMESTAMP}" \
+    DATA_PATH=./data/datasets/fineweb10B_ipa/ \
+    TOKENIZER_PATH=./data/tokenizers/fineweb_1024_bpe.model \
+    VOCAB_SIZE=127 \
+    TRAIN_SEQ_LEN=2048 \
+    EVAL_STRIDE=64 \
+    EVAL_BATCH_SEQS=1024 \
+    VAL_LOSS_EVERY=1000 \
+    MAX_WALLCLOCK_SECONDS="${MAX_WALLCLOCK_SECONDS:-600}" \
+    torchrun --standalone --nproc_per_node="$GPUS" train_gpt.py \
+        2>&1 | tee "$LOGFILE"
+
+    [ -f "final_model.int8.ptz" ] && \
+        cp final_model.int8.ptz "$ARTIFACTDIR/ipa_full_${TIMESTAMP}.int8.ptz"
+
+    log "Training done. Log: $LOGFILE"
+}
+
+cmd_baseline() {
+    local GPUS=$(detect_gpus)
+    [ "$GPUS" -eq 0 ] && GPUS=1
+    local LOGFILE="$LOGDIR/baseline_${TIMESTAMP}.log"
+
+    log "=== BPE baseline + sliding window (${GPUS}xGPU) ==="
+
+    RUN_ID="baseline_${TIMESTAMP}" \
+    EVAL_STRIDE=64 \
+    EVAL_BATCH_SEQS=1024 \
+    VAL_LOSS_EVERY=1000 \
+    MAX_WALLCLOCK_SECONDS="${MAX_WALLCLOCK_SECONDS:-600}" \
+    torchrun --standalone --nproc_per_node="$GPUS" train_gpt.py \
+        2>&1 | tee "$LOGFILE"
+
+    [ -f "final_model.int8.ptz" ] && \
+        cp final_model.int8.ptz "$ARTIFACTDIR/baseline_${TIMESTAMP}.int8.ptz"
+
+    log "Baseline done. Log: $LOGFILE"
+}
+
+cmd_all() {
+    cmd_setup
+    cmd_convert 1
+    cmd_smoke
+    log "=== Smoke passed. Converting all shards... ==="
+    cmd_convert 80
+    cmd_train
+    cmd_push
+}
+
+# ============================================================
+# DISPATCH
+# ============================================================
+
+case "${1:-help}" in
+    setup)    cmd_setup ;;
+    pull)     cmd_pull ;;
+    push)     cmd_push ;;
+    sync)     cmd_sync ;;
+    status)   cmd_status ;;
+    pr)       cmd_pr ;;
+    convert)  cmd_convert "${2:-1}" ;;
+    smoke)    cmd_smoke ;;
+    train)    cmd_train ;;
+    baseline) cmd_baseline ;;
+    all)      cmd_all ;;
+    *)
+        cat <<'HELP'
+rpod — RunPod helper for parameter-golf
+
+Git:
+  rpod pull            Pull latest from fork
+  rpod push            Commit logs and push to fork
+  rpod sync            Sync fork with upstream
+  rpod status          Branch, changes, GPU info
+  rpod pr              Create PR from current branch
+
+Experiments:
+  rpod setup           Pull + download data + test
+  rpod convert [N]     Convert N shards to IPA (default: 1)
+  rpod smoke           50-step training smoke test
+  rpod train           Full 10-min IPA training
+  rpod baseline        BPE baseline with sliding window eval
+  rpod all             Everything end-to-end
+
+Env vars:
+  NGPU=1               Override GPU count
+  MAX_WALLCLOCK_SECONDS=600  Training time cap
+HELP
+        ;;
+esac
