@@ -32,6 +32,33 @@ cd "$WORKDIR"
 
 log() { echo "[$(date +%H:%M:%S)] $*"; }
 
+# Live countdown timer — runs in background, killed when training ends
+_TIMER_PID=""
+start_timer() {
+    local label="$1"
+    local seconds="$2"
+    (
+        local remaining=$seconds
+        while [ $remaining -gt 0 ]; do
+            local mins=$((remaining / 60))
+            local secs=$((remaining % 60))
+            printf "\r\033[K⏱  %s: %02d:%02d remaining " "$label" "$mins" "$secs" >&2
+            sleep 1
+            remaining=$((remaining - 1))
+        done
+        printf "\r\033[K⏱  %s: done!\n" "$label" >&2
+    ) &
+    _TIMER_PID=$!
+}
+stop_timer() {
+    if [ -n "$_TIMER_PID" ]; then
+        kill "$_TIMER_PID" 2>/dev/null || true
+        wait "$_TIMER_PID" 2>/dev/null || true
+        _TIMER_PID=""
+        printf "\r\033[K" >&2
+    fi
+}
+
 # Auto-detect GPU count
 detect_gpus() {
     if [ -n "${NGPU:-}" ]; then
@@ -196,6 +223,7 @@ cmd_smoke() {
     local LOGFILE="$LOGDIR/smoke_${TIMESTAMP}.log"
 
     log "=== Smoke test (50 steps, ${GPUS}xGPU) ==="
+    start_timer "Smoke test" "${MAX_WALLCLOCK_SECONDS:-300}"
 
     RUN_ID="ipa_smoke_${TIMESTAMP}" \
     DATA_PATH=./data/datasets/fineweb10B_ipa/ \
@@ -209,6 +237,7 @@ cmd_smoke() {
     torchrun --standalone --nproc_per_node="$GPUS" train_gpt.py \
         2>&1 | tee "$LOGFILE"
 
+    stop_timer
     log "Smoke test done. Log: $LOGFILE"
 }
 
@@ -218,6 +247,7 @@ cmd_train() {
     local LOGFILE="$LOGDIR/train_ipa_${TIMESTAMP}.log"
 
     log "=== Full IPA training (${GPUS}xGPU, ${MAX_WALLCLOCK_SECONDS:-600}s) ==="
+    start_timer "IPA training" "${MAX_WALLCLOCK_SECONDS:-600}"
 
     RUN_ID="ipa_full_${TIMESTAMP}" \
     DATA_PATH=./data/datasets/fineweb10B_ipa/ \
@@ -231,6 +261,8 @@ cmd_train() {
     torchrun --standalone --nproc_per_node="$GPUS" train_gpt.py \
         2>&1 | tee "$LOGFILE"
 
+    stop_timer
+
     [ -f "final_model.int8.ptz" ] && \
         cp final_model.int8.ptz "$ARTIFACTDIR/ipa_full_${TIMESTAMP}.int8.ptz"
 
@@ -243,6 +275,7 @@ cmd_baseline() {
     local LOGFILE="$LOGDIR/baseline_${TIMESTAMP}.log"
 
     log "=== BPE baseline + sliding window (${GPUS}xGPU) ==="
+    start_timer "Baseline" "${MAX_WALLCLOCK_SECONDS:-600}"
 
     RUN_ID="baseline_${TIMESTAMP}" \
     EVAL_STRIDE=64 \
@@ -251,6 +284,8 @@ cmd_baseline() {
     MAX_WALLCLOCK_SECONDS="${MAX_WALLCLOCK_SECONDS:-600}" \
     torchrun --standalone --nproc_per_node="$GPUS" train_gpt.py \
         2>&1 | tee "$LOGFILE"
+
+    stop_timer
 
     [ -f "final_model.int8.ptz" ] && \
         cp final_model.int8.ptz "$ARTIFACTDIR/baseline_${TIMESTAMP}.int8.ptz"
