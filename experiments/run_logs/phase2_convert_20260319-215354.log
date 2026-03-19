@@ -1,0 +1,29 @@
+============================================================
+FINEWEB BPE -> IPA UINT8 SHARD CONVERSION
+============================================================
+BPE tokenizer loaded: 1024 vocab
+IPA vocab loaded: 127 tokens from data/ipa_vocab.json
+
+--- Converting 1 validation shard(s) ---
+  fineweb_val_000000.bin ... done (144.7s, 141,419,707 IPA tokens, 151,075,853 original bytes)
+
+--- Converting 1 training shard(s) ---
+  fineweb_train_000000.bin ... done (233.5s, 228,261,578 IPA tokens, 243,863,127 original bytes)
+
+============================================================
+CONVERSION SUMMARY
+============================================================
+Shards converted: 2
+Total BPE tokens:      162,021,846
+Total IPA tokens:      369,681,285
+Total original bytes:  394,938,980
+Expansion ratio:       2.28x
+IPA tokens/orig byte:  0.94
+Vocab size:            127
+Output dir:            data/datasets/fineweb10B_ipa
+
+Conversion log saved to data/datasets/fineweb10B_ipa/conversion_log.json
+Shards found: 2
+  fineweb_train_000000.bin: 228,261,578 tokens, max_id=126, orig_bytes=243,863,127 -- OK
+  fineweb_val_000000.bin: 141,419,707 tokens, max_id=125, orig_bytes=151,075,853 -- OK
+GATE PASSED: all shards valid
