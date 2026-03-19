@@ -17,6 +17,26 @@ import sys
 from pathlib import Path
 
 # =============================================================================
+# EXPANDED EXCEPTION DICTIONARY
+# Load ~4800 entries from CMUdict-derived JSON if available,
+# fall back to inline dict for standalone use.
+# =============================================================================
+
+_EXCEPTIONS_JSON = Path(__file__).parent / "data" / "ipa_exceptions_2k.json"
+_EXPANDED_EXCEPTIONS = None
+
+def _load_expanded_exceptions():
+    global _EXPANDED_EXCEPTIONS
+    if _EXPANDED_EXCEPTIONS is not None:
+        return _EXPANDED_EXCEPTIONS
+    if _EXCEPTIONS_JSON.exists():
+        with open(_EXCEPTIONS_JSON, 'r', encoding='utf-8') as f:
+            _EXPANDED_EXCEPTIONS = json.load(f)
+        return _EXPANDED_EXCEPTIONS
+    _EXPANDED_EXCEPTIONS = {}
+    return _EXPANDED_EXCEPTIONS
+
+# =============================================================================
 # EXCEPTION DICTIONARY - Top irregular words only
 # These are words that don't follow simple rules
 # =============================================================================
@@ -194,46 +214,58 @@ def apply_g2p_rules(word):
 def word_to_ipa(word):
     """
     Convert a single word to IPA.
-    First checks exceptions, then applies G2P rules.
+    Checks expanded CMUdict exceptions, then inline exceptions, then G2P rules.
     """
     word_lower = word.lower()
-    
-    # Check exception dictionary first
+
+    # Check expanded exceptions (CMUdict-derived, ~4800 entries)
+    expanded = _load_expanded_exceptions()
+    if word_lower in expanded:
+        return expanded[word_lower]
+
+    # Check inline exception dictionary
     if word_lower in EXCEPTIONS:
         return EXCEPTIONS[word_lower]
-    
+
     # Apply G2P rules
     ipa = apply_g2p_rules(word_lower)
-    
-    # Mark unknown/problematic conversions with *
+
+    # Fallback: return rule-based result (never fail)
     if not ipa or len(ipa) == 0:
-        return word_lower + '*'
-    
+        return word_lower
+
     return ipa
 
 
 def text_to_ipa(text):
     """
     Convert English text to IPA notation.
-    Handles punctuation, spacing, and unknown words.
+    Alphabetic words go through G2P. Everything else passes through as-is.
     """
-    # Clean text
     text = text.lower()
-    
-    # Split into words (preserve some punctuation as separate tokens)
-    words = re.findall(r"[a-z']+|[^a-z']+", text)
-    
+
+    # Split into alphabetic words vs everything else
+    parts = re.findall(r"[a-z']+|[^a-z']+", text)
+
     result = []
-    for word in words:
-        if re.match(r"[a-z']+", word):
-            # It's a word - convert to IPA
-            ipa_word = word_to_ipa(word)
-            result.append(ipa_word)
+    for part in parts:
+        if re.match(r"[a-z']+", part):
+            # Alphabetic word -> G2P conversion
+            result.append(word_to_ipa(part))
         else:
-            # It's punctuation/spaces - keep as is
-            result.append(word)
-    
-    return ' '.join(result)
+            # Non-alpha (punctuation, digits, whitespace, URLs, HTML) -> passthrough
+            result.append(part)
+
+    return ''.join(result)
+
+
+def text_to_ipa_chars(text):
+    """
+    Convert English text to a list of IPA characters (token-level).
+    Each character becomes one token. Used for building training shards.
+    """
+    ipa_text = text_to_ipa(text)
+    return list(ipa_text)
 
 
 def analyze_converter_size():

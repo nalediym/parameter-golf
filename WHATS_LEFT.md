@@ -1,112 +1,79 @@
-# What's Left To Do - Parameter Golf Experiments
+# What's Left To Do - Parameter Golf
 
-## 🎯 Immediate Actions Required
+## Current Best: 1.1925 bpb (sliding window eval on BPE baseline)
 
-### 1. Data Pipeline Completion
-- [ ] Convert FineWeb to IPA format (80 shards) - `convert_fineweb_ipa.py`
-- [ ] Convert FineWeb to morphological format - `experiments/morphological_tokenization/convert_fineweb_to_morph.py`
-- [ ] Build compact IPA tokenizer (47 vocab) for official training
-- [ ] Validate conversion quality on validation set
+## Strategy (from eng review 2026-03-19)
 
-### 2. Run Pod Experiments
-Once data is ready, run these in parallel with tmux:
+Reduced scope: prove ONE tokenizer experiment end-to-end before expanding.
+Go/no-go: IPA must beat 1.19 bpb to justify further work.
 
-```bash
-# On your RunPod instance:
-./runpod_tmux_runner.sh all
-```
+## Phase 0: Prep (on main) -- DONE
+- [x] Port sliding window eval into main `train_gpt.py`
+- [x] Consolidate duplicate IPA scripts
+- [x] Update this file
 
-Experiments to run:
-- [ ] **A0**: Baseline BPE-1024 (already exists, verify on your pod)
-- [ ] **A1**: IPA-only (47 vocab) 
-- [ ] **A3**: Morphological-only (morpheme vocab)
-- [ ] **A5**: Hybrid - IPA base + morph features
+## Phase 1: IPA Vocab + Converter (branch: exp/ipa-baseline)
+- [ ] Build exact vocab inventory (~94 chars measured on FineWeb)
+- [ ] Expand G2P exceptions to ~2000 words (from CMUdict, BSD licensed)
+- [ ] Add passthrough logic: alpha words -> G2P, everything else -> char-by-char
+- [ ] Tests T1-T5 (converter correctness)
+- GATE: converter handles 10K random FineWeb words without crash
 
-### 3. Sign-Language-Inspired Tokenizer (Not Started)
+## Phase 2: Shard Conversion
+- [ ] Convert 1 shard to uint8 IPA + byte_count sidecar
+- [ ] Assertion: sum(byte_counts) == original shard byte count
+- [ ] Tests T6-T9 (shard integrity)
+- GATE: shard loads, all token IDs < vocab_size, byte counts match
 
-From `TODO_sign_language_inspired_tokenization.md`:
+## Phase 3: Training Smoke Test
+- [ ] Parameterize `train_gpt.py` (TOKENIZER_TYPE=ipa)
+- [ ] uint8 loader, vocab=~94, seq_len=2048
+- [ ] bpb calc: total_nats / (original_bytes * ln(2))
+- [ ] 50-step smoke test
+- [ ] Tests T10-T14
+- GATE: training completes, loss decreasing, no NaN
 
-**Phase 1 - Core Implementation:**
-- [ ] Define token record with `base_id` + feature IDs
-- [ ] Implement IPA base channel
-- [ ] Implement `ORTH_HINT` feature channel
-- [ ] Implement `MORPH_ROLE` feature channel
-- [ ] Build preprocessing pipeline
+## Phase 4: Full Run + Eval
+- [ ] Convert all 80 shards
+- [ ] Full 10-min training on 8xH100
+- [ ] Sliding window eval (EVAL_STRIDE=64)
+- [ ] Tests T15-T16 (bpb sanity)
+- GATE: bpb < 1.19 -> expand to A2 | bpb >= 1.19 -> stop and analyze
 
-**Phase 2 - Model Integration:**
-- [ ] Implement channel embeddings
-- [ ] Additive fusion: `e_total = e_base + e_features`
-- [ ] Test concat+projection fusion
-- [ ] Parameter budget tracking
+## Key Parameters (from measurement on real FineWeb data)
+- IPA chars / BPE tokens: 2.30x
+- IPA chars / original bytes: 0.94x
+- Unique IPA chars (with passthrough): 94
+- IPA seq=2048 context: ~2176 bytes (~870 words)
+- Architecture: 9 layers, 512 dim, tied embeddings (same as baseline)
 
-**Phase 3 - Experiments:**
-- [ ] A1: IPA-only base
-- [ ] A2: IPA + ORTH_HINT
-- [ ] A3: morph-only base
-- [ ] A4: morph + MORPH_ROLE
-- [ ] A5: hybrid (IPA + MORPH_ROLE + ORTH_HINT)
-- [ ] A6: full feature bundle
+## Deferred (only if A1 beats 1.19 bpb)
+- A2: IPA + ORTH_HINT feature channel
+- A3: Morphological-only tokenizer
+- A5: Hybrid IPA + morph
+- Sign-language-inspired multi-channel embeddings
+- Probe evaluation suites (homophone, morphological-family)
+- Full ablation study (A6, A7)
 
-### 4. Evaluation & Probes
-- [ ] Build homophone probe set (night/knight, to/too/two)
-- [ ] Build morphological-family probe (run/running/runner/ran)
-- [ ] Build clause-function probes (questions, negation)
-- [ ] Track bits-per-byte on validation
-- [ ] Measure embedding memory overhead
-
-### 5. Submission Prep
+## Submission Prep (after best experiment identified)
 - [ ] Compress to 16MB (code + model)
 - [ ] Verify <10min runtime on 8xH100
 - [ ] Create README.md for best result
 - [ ] Create submission.json
 - [ ] Submit PR to /records folder
 
-## 📊 Experiment Matrix
-
-| Exp | Base Channel | Features | Vocab Size | Expected Impact |
-|-----|--------------|----------|------------|-----------------|
-| A0 | BPE-1024 | None | 1024 | Baseline: ~1.22 bpb |
-| A1 | IPA | None | ~47 | 92% embedding savings |
-| A2 | IPA | ORTH_HINT | ~47 + hints | Disambiguation help |
-| A3 | Morph | None | ~1000 | Structured tokens |
-| A4 | Morph | MORPH_ROLE | ~1000 + roles | Syntax awareness |
-| A5 | IPA | MORPH_ROLE + ORTH_HINT | ~47 + features | Best of both |
-
-## 🚀 Next Steps (Priority Order)
-
-1. **Today**: 
-   - SSH into RunPod
-   - Run `setup_runpod_experiments.sh`
-   - Start converting FineWeb to IPA
-
-2. **Tomorrow**:
-   - Finish data conversion
-   - Launch A0 (baseline) to verify setup
-   - Launch A1 (IPA) experiment
-
-3. **This Week**:
-   - Complete A3 (morph)
-   - Analyze results
-   - Decide if A5 (hybrid) is worth building
-
-4. **Next Week**:
-   - Build sign-language features if A5 promising
-   - Run full ablation study (A6, A7)
-   - Prepare best submission
-
-## 🔧 Using Your RunPod
-
+## RunPod Quick Reference
 ```bash
-# Connect
 ssh root@<your-pod-ip>
-
-# Quick start
 cd /workspace/parameter-golf
-./runpod_tmux_runner.sh all
 
-# Monitor
-tmux ls
-tail -f experiments/run_logs/*.log
+# BPE baseline with sliding window eval
+EVAL_STRIDE=64 EVAL_BATCH_SEQS=1024 \
+torchrun --standalone --nproc_per_node=8 train_gpt.py
+
+# IPA experiment (after Phase 3)
+TOKENIZER_TYPE=ipa EVAL_STRIDE=64 \
+torchrun --standalone --nproc_per_node=8 train_gpt.py
 ```
 
 See `RUNPOD_TMUX_GUIDE.md` for full reference.
