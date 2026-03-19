@@ -328,6 +328,154 @@ cmd_all() {
 }
 
 # ============================================================
+# DASHBOARD COMMANDS
+# ============================================================
+
+cmd_cost() {
+    echo "=== RunPod Cost Tracker ==="
+    echo ""
+
+    # Session uptime
+    local UPTIME=$(cat /proc/uptime 2>/dev/null | awk '{printf "%.0f", $1}')
+    if [ -n "$UPTIME" ]; then
+        local HRS=$((UPTIME / 3600))
+        local MINS=$(( (UPTIME % 3600) / 60 ))
+        echo "Pod uptime:    ${HRS}h ${MINS}m"
+
+        # Cost estimate (detect from runpodctl or default)
+        local RATE="2.69"
+        local COST=$(echo "$UPTIME $RATE" | awk '{printf "%.2f", ($1/3600) * $2}')
+        echo "Rate:          \$${RATE}/hr"
+        echo "Session cost:  \$${COST}"
+        echo ""
+        echo "Projection:"
+        echo "  +10 min:     \$$(echo "$UPTIME $RATE" | awk '{printf "%.2f", (($1+600)/3600) * $2}')"
+        echo "  +1 hour:     \$$(echo "$UPTIME $RATE" | awk '{printf "%.2f", (($1+3600)/3600) * $2}')"
+    else
+        echo "Pod uptime:    unknown (not on RunPod?)"
+    fi
+
+    echo ""
+    echo "Tip: stop your pod when done to save money!"
+    echo "  runpodctl pod stop uzjfv1hf2aq5lb"
+}
+
+cmd_results() {
+    echo "=== Experiment Results ==="
+    echo ""
+    printf "%-40s  %-10s  %-10s  %-8s\n" "RUN" "VAL_LOSS" "VAL_BPB" "STEPS"
+    printf "%-40s  %-10s  %-10s  %-8s\n" "---" "--------" "-------" "-----"
+
+    for logfile in "$LOGDIR"/*.log; do
+        [ -f "$logfile" ] || continue
+        local name=$(basename "$logfile" .log)
+
+        # Get final bpb (prefer sliding, then int8 roundtrip, then last val)
+        local bpb=$(grep "sliding_exact" "$logfile" 2>/dev/null | tail -1 | grep -o 'val_bpb:[0-9.]*' | cut -d: -f2)
+        [ -z "$bpb" ] && bpb=$(grep "roundtrip_exact" "$logfile" 2>/dev/null | tail -1 | grep -o 'val_bpb:[0-9.]*' | cut -d: -f2)
+        [ -z "$bpb" ] && bpb=$(grep "val_bpb:" "$logfile" 2>/dev/null | tail -1 | grep -o 'val_bpb:[0-9.]*' | cut -d: -f2)
+
+        local loss=$(grep "roundtrip_exact\|roundtrip " "$logfile" 2>/dev/null | tail -1 | grep -o 'val_loss:[0-9.]*' | cut -d: -f2)
+        [ -z "$loss" ] && loss=$(grep "val_loss:" "$logfile" 2>/dev/null | tail -1 | grep -o 'val_loss:[0-9.]*' | cut -d: -f2)
+
+        local steps=$(grep "step:" "$logfile" 2>/dev/null | tail -1 | grep -o 'step:[0-9]*/[0-9]*' | head -1)
+
+        [ -n "$bpb" ] && printf "%-40s  %-10s  %-10s  %-8s\n" "$name" "${loss:--}" "$bpb" "${steps:--}"
+    done
+
+    echo ""
+    echo "Target: < 1.19 bpb (beat sliding window BPE baseline)"
+    echo "Leaderboard SOTA: 1.1925 bpb"
+}
+
+cmd_next() {
+    echo "=== What To Do Next ==="
+    echo ""
+
+    # Check what's been done
+    local HAS_CONVERT=false HAS_SMOKE=false HAS_BASELINE=false HAS_TRAIN=false
+    local SMOKE_BPB="" TRAIN_BPB="" BASELINE_BPB=""
+
+    for logfile in "$LOGDIR"/*.log; do
+        [ -f "$logfile" ] || continue
+        local name=$(basename "$logfile" .log)
+        case "$name" in
+            convert_*|phase2_*) HAS_CONVERT=true ;;
+            smoke_*)
+                HAS_SMOKE=true
+                SMOKE_BPB=$(grep "val_bpb:" "$logfile" 2>/dev/null | tail -1 | grep -o 'val_bpb:[0-9.]*' | cut -d: -f2)
+                ;;
+            baseline_*)
+                HAS_BASELINE=true
+                BASELINE_BPB=$(grep "roundtrip_exact" "$logfile" 2>/dev/null | tail -1 | grep -o 'val_bpb:[0-9.]*' | cut -d: -f2)
+                ;;
+            train_ipa_*|ipa_full_*)
+                HAS_TRAIN=true
+                TRAIN_BPB=$(grep "roundtrip_exact" "$logfile" 2>/dev/null | tail -1 | grep -o 'val_bpb:[0-9.]*' | cut -d: -f2)
+                ;;
+        esac
+    done
+
+    local GPUS=$(detect_gpus)
+
+    echo "Progress:"
+    $HAS_CONVERT && echo "  [x] Phase 2: Shard conversion" || echo "  [ ] Phase 2: ./rpod convert"
+    $HAS_SMOKE   && echo "  [x] Phase 3: Smoke test (bpb=$SMOKE_BPB)" || echo "  [ ] Phase 3: ./rpod smoke"
+    $HAS_TRAIN   && echo "  [x] Phase 4: Full training (bpb=$TRAIN_BPB)" || echo "  [ ] Phase 4: ./rpod train"
+    $HAS_BASELINE && echo "  [x] Baseline: BPE comparison (bpb=$BASELINE_BPB)" || echo "  [ ] Baseline: ./rpod baseline"
+    echo ""
+
+    # Recommend next action
+    if ! $HAS_CONVERT; then
+        echo "NEXT: Convert shards first"
+        echo "  ./rpod convert"
+    elif ! $HAS_SMOKE; then
+        echo "NEXT: Run smoke test"
+        echo "  ./rpod smoke"
+    elif ! $HAS_TRAIN; then
+        if [ "$GPUS" -ge 8 ]; then
+            echo "NEXT: You have ${GPUS} GPUs — run the full IPA training!"
+            echo "  ./rpod train"
+        else
+            echo "NEXT: Run IPA training on ${GPUS}xGPU (won't be competition-grade"
+            echo "  but will show if bpb is trending in the right direction)"
+            echo "  ./rpod train"
+            echo ""
+            echo "  For competition results, spin up 8xH100:"
+            echo "  https://console.runpod.io/deploy?template=y5cejece4j"
+        fi
+    elif ! $HAS_BASELINE; then
+        echo "NEXT: Run BPE baseline for comparison"
+        echo "  ./rpod baseline"
+    else
+        echo "All phases done!"
+        echo ""
+        if [ -n "$TRAIN_BPB" ] && [ -n "$BASELINE_BPB" ]; then
+            echo "IPA bpb:      $TRAIN_BPB"
+            echo "Baseline bpb: $BASELINE_BPB"
+            local WINNER=$(echo "$TRAIN_BPB $BASELINE_BPB" | awk '{if ($1 < $2) print "IPA WINS"; else print "BPE WINS"}')
+            echo "Result:       $WINNER"
+            echo ""
+            if [ "$WINNER" = "IPA WINS" ]; then
+                echo "IPA beat the baseline! Consider:"
+                echo "  1. Run on 8xH100 for competition-grade result"
+                echo "  2. Expand to A2 (add ORTH_HINT feature channel)"
+            else
+                echo "BPE still ahead. Consider:"
+                echo "  1. Try 8xH100 (more steps may help IPA converge)"
+                echo "  2. Tune hyperparameters (lr, warmdown)"
+                echo "  3. Pivot to morphological tokenizer (./rpod convert for morph)"
+            fi
+        else
+            echo "Push logs and compare: ./rpod results"
+        fi
+    fi
+
+    echo ""
+    cmd_cost 2>/dev/null || true
+}
+
+# ============================================================
 # DISPATCH
 # ============================================================
 
@@ -343,6 +491,9 @@ case "${1:-help}" in
     train)    cmd_train ;;
     baseline) cmd_baseline ;;
     all)      cmd_all ;;
+    cost)     cmd_cost ;;
+    results)  cmd_results ;;
+    next)     cmd_next ;;
     *)
         cat <<'HELP'
 rpod — RunPod helper for parameter-golf
@@ -361,6 +512,11 @@ Experiments:
   rpod train           Full 10-min IPA training
   rpod baseline        BPE baseline with sliding window eval
   rpod all             Everything end-to-end
+
+Dashboard:
+  rpod cost            Show session time and estimated cost
+  rpod results         Show bpb results from all logs
+  rpod next            What to do next
 
 Env vars:
   NGPU=1               Override GPU count
