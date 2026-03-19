@@ -18,6 +18,25 @@
 **Status:** T1-T5 done (66/66 passing). T6-T16 not yet built.
 **Priority:** Medium — needed before submission, not before experiments.
 
+## BPE on IPA — hybrid tokenizer (HIGH PRIORITY)
+**What:** Train a BPE/SentencePiece tokenizer on IPA-converted text instead of raw English. Common IPA sequences get merged into single tokens.
+**Why:** Char-level IPA (current approach) has 2.3x sequence expansion which kills context. BPE merging would compress common IPA patterns back down:
+```
+Char IPA:  "ðə naɪt" → [ð, ə, ' ', n, a, ɪ, t]     7 tokens (too long)
+BPE IPA:   "ðə naɪt" → [ðə, naɪt]                    2 tokens (compact!)
+```
+**Best of both worlds:**
+- Short sequences (like BPE) — model sees more context
+- Phonetic structure (like IPA) — "knight" and "night" share tokens
+- Related words share subwords: "naɪt" / "naɪts" / "naɪtli"
+- Common sounds merge: "ɪŋ" (-ing), "ʃən" (-tion), "ðə" (the)
+**Implementation:**
+1. Convert FineWeb to IPA text (already done)
+2. Train SentencePiece on the IPA text with vocab_size=256 or 512
+3. Use that tokenizer with train_gpt.py (standard BPE pipeline, just different alphabet)
+**Depends on:** IPA conversion pipeline (done), SentencePiece training
+**Priority:** HIGH — this is the most promising next experiment. Addresses the core weakness (long sequences) while keeping the core strength (phonetic structure).
+
 ## Research: int4 Quantization
 **What:** Explore 4-bit quantization to fit larger models in 16MB budget.
 **Why:** int4 = 4 bits/weight (16 values) vs int8 = 8 bits (256 values). Could free 6-8MB for 2x parameters or deeper architecture.
