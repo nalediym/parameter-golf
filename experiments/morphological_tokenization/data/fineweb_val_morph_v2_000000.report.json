@@ -1,0 +1,12 @@
+{
+  "input_path": "../../data/datasets/fineweb10B_sp1024/fineweb_val_000000.bin",
+  "output_path": "data/fineweb_val_morph_v2_000000.bin",
+  "bpe_tokens": 62021846,
+  "morph_tokens": 34027090,
+  "ratio": 0.5486,
+  "unique_words": 314569,
+  "cache_entries": 314569,
+  "convert_seconds": 190.6,
+  "total_seconds": 191.03,
+  "tokens_per_second": 325397.0
+}

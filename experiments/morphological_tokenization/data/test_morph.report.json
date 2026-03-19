@@ -1,0 +1,7 @@
+{
+  "input_tokens": 10000,
+  "output_tokens": 13007,
+  "ratio": 1.3007,
+  "input_file": "../../data/datasets/fineweb10B_sp1024/fineweb_val_000000.bin",
+  "output_file": "data/test_morph.bin"
+}
