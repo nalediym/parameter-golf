@@ -17,3 +17,16 @@
 **Why:** Competition scrutinizes tokenizer changes. Tests are proof of correctness.
 **Status:** T1-T5 done (66/66 passing). T6-T16 not yet built.
 **Priority:** Medium — needed before submission, not before experiments.
+
+## Research: int4 Quantization
+**What:** Explore 4-bit quantization to fit larger models in 16MB budget.
+**Why:** int4 = 4 bits/weight (16 values) vs int8 = 8 bits (256 values). Could free 6-8MB for 2x parameters or deeper architecture.
+**Key techniques:**
+- **GPTQ/AWQ** — post-training quantization with calibration
+- **QAT** — quantization-aware training during the 10min window
+- **NF4/FP4** — normalized/float4 formats (LLM.int8(), QLoRA)
+- **Mixed precision** — int4 weights + int8/fp16 activations
+- **Grouping** — per-channel or per-block scaling for better precision
+**Papers:** LLM.int8() (Dettmers et al), GPTQ (Frantar et al), QLoRA (Dettmers et al)
+**Risk:** 16 values might be too coarse for 10min training. Need to test if quality loss > parameter gain.
+**Priority:** High — could be the differentiator for leaderboard.
