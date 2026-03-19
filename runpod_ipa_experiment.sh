@@ -172,34 +172,39 @@ run_baseline() {
 }
 
 # ============================================================
-# PUSH: Commit logs + artifacts and push back to fork
+# PUSH: Commit logs and push back to fork
 # ============================================================
 push_results() {
     log "=== PUSHING RESULTS ==="
     cd "$WORKDIR"
 
-    git add experiments/run_logs/ experiments/run_artifacts/ \
-          data/datasets/fineweb10B_ipa/conversion_log.json \
-          data/datasets/fineweb10B_ipa/total_original_bytes.txt \
-          2>/dev/null || true
+    # Add log files (small text files only)
+    for f in experiments/run_logs/*.log; do
+        [ -f "$f" ] && git add "$f"
+    done
 
-    # Don't add the actual shard .bin files (too large for git)
-    git reset -- 'data/datasets/fineweb10B_ipa/*.bin' 2>/dev/null || true
-    git reset -- 'data/datasets/fineweb10B_ipa/*.bytes' 2>/dev/null || true
-    git reset -- 'experiments/run_artifacts/*.ptz' 2>/dev/null || true
+    # Add conversion metadata (small JSON)
+    [ -f data/datasets/fineweb10B_ipa/conversion_log.json ] && \
+        git add data/datasets/fineweb10B_ipa/conversion_log.json
+    [ -f data/datasets/fineweb10B_ipa/total_original_bytes.txt ] && \
+        git add data/datasets/fineweb10B_ipa/total_original_bytes.txt
 
-    if git diff --cached --quiet; then
+    # Show what's staged
+    git status --short
+    STAGED=$(git diff --cached --name-only | wc -l)
+
+    if [ "$STAGED" -eq 0 ]; then
         log "No new results to push."
         return
     fi
 
+    log "Committing $STAGED file(s)..."
     git commit -m "results(ipa): RunPod experiment logs $(date +%Y-%m-%d)
 
 Co-Authored-By: Claude Opus 4.6 (1M context) <noreply@anthropic.com>"
 
     git push origin exp/ipa-baseline
     log "Results pushed to origin/exp/ipa-baseline"
-    log "Pull locally with: git pull origin exp/ipa-baseline"
 }
 
 # ============================================================
