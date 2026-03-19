@@ -1,0 +1,54 @@
+{
+  "timestamp": "2026-03-19T13:05:49.359374",
+  "shards_processed": 3,
+  "format": "binary",
+  "total_original_size": 600003072,
+  "total_ipa_size": 1448621,
+  "avg_compression_ratio": 414.189130214183,
+  "total_tokens": 300000000,
+  "total_original_chars": 1429613,
+  "total_ipa_chars": 1444493,
+  "total_unknown_words": 16738,
+  "avg_unique_symbols": 130.66666666666666,
+  "shards": [
+    {
+      "shard": "fineweb_train_000000",
+      "original_size": 200001024,
+      "original_tokens": 100000000,
+      "original_chars": 469341,
+      "ipa_chars": 473166,
+      "ipa_size": 474567,
+      "compression_ratio": 421.4389622540126,
+      "unique_symbols": 140,
+      "has_unknown_words": true,
+      "unknown_word_count": 5505,
+      "output_path": "data/ipa_converted/fineweb_train_000000_ipa.bin"
+    },
+    {
+      "shard": "fineweb_train_000001",
+      "original_size": 200001024,
+      "original_tokens": 100000000,
+      "original_chars": 467284,
+      "ipa_chars": 472051,
+      "ipa_size": 473350,
+      "compression_ratio": 422.5224970951727,
+      "unique_symbols": 110,
+      "has_unknown_words": true,
+      "unknown_word_count": 5776,
+      "output_path": "data/ipa_converted/fineweb_train_000001_ipa.bin"
+    },
+    {
+      "shard": "fineweb_train_000002",
+      "original_size": 200001024,
+      "original_tokens": 100000000,
+      "original_chars": 492988,
+      "ipa_chars": 499276,
+      "ipa_size": 500704,
+      "compression_ratio": 399.4396369911165,
+      "unique_symbols": 142,
+      "has_unknown_words": true,
+      "unknown_word_count": 5457,
+      "output_path": "data/ipa_converted/fineweb_train_000002_ipa.bin"
+    }
+  ]
+}

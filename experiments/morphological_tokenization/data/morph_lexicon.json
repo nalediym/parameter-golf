@@ -1,0 +1,1538 @@
+{
+  "roots": [
+    "act",
+    "activ",
+    "activiti",
+    "add",
+    "addition",
+    "aft",
+    "analysi",
+    "analyt",
+    "app",
+    "appli",
+    "applic",
+    "avail",
+    "availabil",
+    "bab",
+    "babil",
+    "bable",
+    "behavi",
+    "behavior",
+    "cap",
+    "capabiliti",
+    "capac",
+    "ced",
+    "ceive",
+    "cep",
+    "cept",
+    "ceptu",
+    "ces",
+    "cess",
+    "com",
+    "cre",
+    "creat",
+    "creativ",
+    "dic",
+    "dict",
+    "dictabil",
+    "diff",
+    "differ",
+    "dimen",
+    "dimension",
+    "direc",
+    "direction",
+    "dis",
+    "dition",
+    "divers",
+    "duc",
+    "duce",
+    "ducibil",
+    "duct",
+    "ductiv",
+    "educ",
+    "education",
+    "en",
+    "era",
+    "erat",
+    "erate",
+    "eration",
+    "establishmentarian",
+    "flex",
+    "flexibil",
+    "form",
+    "format",
+    "formation",
+    "fort",
+    "found",
+    "foundation",
+    "func",
+    "function",
+    "functional",
+    "gener",
+    "general",
+    "generaliz",
+    "generalizabil",
+    "generat",
+    "gov",
+    "govern",
+    "happ",
+    "happi",
+    "lat",
+    "late",
+    "lation",
+    "mathemat",
+    "mathematic",
+    "ment",
+    "methodolog",
+    "mot",
+    "motiv",
+    "motivation",
+    "mun",
+    "munic",
+    "muniti",
+    "nation",
+    "nec",
+    "necess",
+    "necessari",
+    "nect",
+    "nectiv",
+    "onl",
+    "organ",
+    "organiz",
+    "organization",
+    "otechnolog",
+    "oth",
+    "perform",
+    "peri",
+    "pir",
+    "pirical",
+    "plex",
+    "plicat",
+    "port",
+    "portun",
+    "portuniti",
+    "pos",
+    "pose",
+    "posite",
+    "position",
+    "poss",
+    "possib",
+    "pract",
+    "practition",
+    "pre",
+    "pret",
+    "pro",
+    "put",
+    "putation",
+    "pute",
+    "run",
+    "runn",
+    "sad",
+    "sadd",
+    "sec",
+    "secur",
+    "sensit",
+    "sensitiv",
+    "sent",
+    "sentat",
+    "specif",
+    "specific",
+    "specifical",
+    "spir",
+    "spiration",
+    "spire",
+    "spons",
+    "sponsibil",
+    "stand",
+    "statist",
+    "statistic",
+    "stood",
+    "struc",
+    "struct",
+    "struction",
+    "structur",
+    "tabil",
+    "table",
+    "talk",
+    "tation",
+    "techn",
+    "technic",
+    "technolog",
+    "telecommunication",
+    "tens",
+    "tense",
+    "text",
+    "textu",
+    "the",
+    "theor",
+    "theoret",
+    "thi",
+    "trad",
+    "tradition",
+    "uld",
+    "velop",
+    "vers",
+    "versation",
+    "verse",
+    "versiti",
+    "viron",
+    "vironment",
+    "walk"
+  ],
+  "prefixes": [
+    "anti",
+    "bi",
+    "co",
+    "com",
+    "con",
+    "de",
+    "em",
+    "en",
+    "ex",
+    "im",
+    "in",
+    "inter",
+    "multi",
+    "op",
+    "pre",
+    "pro",
+    "re",
+    "trans",
+    "un",
+    "under",
+    "uni"
+  ],
+  "suffixes": [
+    "able",
+    "al",
+    "ance",
+    "ant",
+    "ary",
+    "ate",
+    "ation",
+    "ed",
+    "ence",
+    "ent",
+    "er",
+    "ern",
+    "es",
+    "est",
+    "ian",
+    "ible",
+    "ic",
+    "ical",
+    "ify",
+    "ing",
+    "ism",
+    "ition",
+    "ity",
+    "ive",
+    "ize",
+    "ly",
+    "ment",
+    "ness",
+    "or",
+    "ory",
+    "s",
+    "ship",
+    "sion",
+    "tion",
+    "ure",
+    "y"
+  ],
+  "lexicon": {
+    "this": [
+      "thi",
+      "s"
+    ],
+    "they": [
+      "the",
+      "y"
+    ],
+    "could": [
+      "co",
+      "uld"
+    ],
+    "other": [
+      "oth",
+      "er"
+    ],
+    "only": [
+      "onl",
+      "y"
+    ],
+    "after": [
+      "aft",
+      "er"
+    ],
+    "running": [
+      "runn",
+      "ing"
+    ],
+    "runner": [
+      "runn",
+      "er"
+    ],
+    "runs": [
+      "run",
+      "s"
+    ],
+    "walking": [
+      "walk",
+      "ing"
+    ],
+    "walker": [
+      "walk",
+      "er"
+    ],
+    "walks": [
+      "walk",
+      "s"
+    ],
+    "walked": [
+      "walk",
+      "ed"
+    ],
+    "talking": [
+      "talk",
+      "ing"
+    ],
+    "talker": [
+      "talk",
+      "er"
+    ],
+    "talks": [
+      "talk",
+      "s"
+    ],
+    "talked": [
+      "talk",
+      "ed"
+    ],
+    "happiness": [
+      "happi",
+      "ness"
+    ],
+    "happy": [
+      "happ",
+      "y"
+    ],
+    "happier": [
+      "happi",
+      "er"
+    ],
+    "happiest": [
+      "happi",
+      "est"
+    ],
+    "sadness": [
+      "sad",
+      "ness"
+    ],
+    "sadder": [
+      "sadd",
+      "er"
+    ],
+    "saddest": [
+      "sadd",
+      "est"
+    ],
+    "impossible": [
+      "im",
+      "poss",
+      "ible"
+    ],
+    "possible": [
+      "poss",
+      "ible"
+    ],
+    "possibly": [
+      "possib",
+      "ly"
+    ],
+    "uncomfortable": [
+      "un",
+      "com",
+      "fort",
+      "able"
+    ],
+    "comfortable": [
+      "com",
+      "fort",
+      "able"
+    ],
+    "comfort": [
+      "com",
+      "fort"
+    ],
+    "telecommunications": [
+      "telecommunication",
+      "s"
+    ],
+    "communication": [
+      "com",
+      "munic",
+      "ation"
+    ],
+    "communicate": [
+      "com",
+      "munic",
+      "ate"
+    ],
+    "international": [
+      "inter",
+      "nation",
+      "al"
+    ],
+    "national": [
+      "nation",
+      "al"
+    ],
+    "antidisestablishmentarianism": [
+      "anti",
+      "dis",
+      "establishmentarian",
+      "ism"
+    ],
+    "preprocessing": [
+      "pre",
+      "pro",
+      "cess",
+      "ing"
+    ],
+    "processing": [
+      "pro",
+      "cess",
+      "ing"
+    ],
+    "process": [
+      "pro",
+      "ces",
+      "s"
+    ],
+    "multidimensional": [
+      "multi",
+      "dimension",
+      "al"
+    ],
+    "dimensional": [
+      "dimension",
+      "al"
+    ],
+    "dimension": [
+      "dimen",
+      "sion"
+    ],
+    "biotechnology": [
+      "bi",
+      "otechnolog",
+      "y"
+    ],
+    "technology": [
+      "technolog",
+      "y"
+    ],
+    "technological": [
+      "technolog",
+      "ical"
+    ],
+    "representation": [
+      "re",
+      "pre",
+      "sent",
+      "ation"
+    ],
+    "represent": [
+      "re",
+      "pre",
+      "sent"
+    ],
+    "representative": [
+      "re",
+      "pre",
+      "sentat",
+      "ive"
+    ],
+    "understanding": [
+      "under",
+      "stand",
+      "ing"
+    ],
+    "understand": [
+      "under",
+      "stand"
+    ],
+    "understood": [
+      "under",
+      "stood"
+    ],
+    "development": [
+      "de",
+      "velop",
+      "ment"
+    ],
+    "develop": [
+      "de",
+      "velop"
+    ],
+    "developed": [
+      "de",
+      "velop",
+      "ed"
+    ],
+    "information": [
+      "in",
+      "form",
+      "ation"
+    ],
+    "inform": [
+      "in",
+      "form"
+    ],
+    "informed": [
+      "in",
+      "form",
+      "ed"
+    ],
+    "application": [
+      "applic",
+      "ation"
+    ],
+    "apply": [
+      "app",
+      "ly"
+    ],
+    "applied": [
+      "appli",
+      "ed"
+    ],
+    "government": [
+      "govern",
+      "ment"
+    ],
+    "govern": [
+      "gov",
+      "ern"
+    ],
+    "governing": [
+      "govern",
+      "ing"
+    ],
+    "environment": [
+      "en",
+      "viron",
+      "ment"
+    ],
+    "environmental": [
+      "en",
+      "vironment",
+      "al"
+    ],
+    "performance": [
+      "perform",
+      "ance"
+    ],
+    "performing": [
+      "perform",
+      "ing"
+    ],
+    "experience": [
+      "ex",
+      "peri",
+      "ence"
+    ],
+    "experienced": [
+      "ex",
+      "peri",
+      "en",
+      "ced"
+    ],
+    "difference": [
+      "differ",
+      "ence"
+    ],
+    "different": [
+      "differ",
+      "ent"
+    ],
+    "differ": [
+      "diff",
+      "er"
+    ],
+    "important": [
+      "im",
+      "port",
+      "ant"
+    ],
+    "importance": [
+      "im",
+      "port",
+      "ance"
+    ],
+    "relationship": [
+      "re",
+      "lation",
+      "ship"
+    ],
+    "relate": [
+      "re",
+      "late"
+    ],
+    "related": [
+      "re",
+      "lat",
+      "ed"
+    ],
+    "generation": [
+      "gener",
+      "ation"
+    ],
+    "generate": [
+      "gener",
+      "ate"
+    ],
+    "generated": [
+      "generat",
+      "ed"
+    ],
+    "organization": [
+      "organiz",
+      "ation"
+    ],
+    "organize": [
+      "organ",
+      "ize"
+    ],
+    "organized": [
+      "organiz",
+      "ed"
+    ],
+    "conversation": [
+      "con",
+      "vers",
+      "ation"
+    ],
+    "converse": [
+      "con",
+      "verse"
+    ],
+    "conversational": [
+      "con",
+      "versation",
+      "al"
+    ],
+    "probability": [
+      "pro",
+      "babil",
+      "ity"
+    ],
+    "probable": [
+      "pro",
+      "bable"
+    ],
+    "probably": [
+      "pro",
+      "bab",
+      "ly"
+    ],
+    "availability": [
+      "availabil",
+      "ity"
+    ],
+    "available": [
+      "avail",
+      "able"
+    ],
+    "flexibility": [
+      "flexibil",
+      "ity"
+    ],
+    "flexible": [
+      "flex",
+      "ible"
+    ],
+    "responsibility": [
+      "re",
+      "sponsibil",
+      "ity"
+    ],
+    "responsible": [
+      "re",
+      "spons",
+      "ible"
+    ],
+    "community": [
+      "com",
+      "mun",
+      "ity"
+    ],
+    "communities": [
+      "com",
+      "muniti",
+      "es"
+    ],
+    "activity": [
+      "activ",
+      "ity"
+    ],
+    "activities": [
+      "activiti",
+      "es"
+    ],
+    "active": [
+      "act",
+      "ive"
+    ],
+    "university": [
+      "uni",
+      "vers",
+      "ity"
+    ],
+    "universities": [
+      "uni",
+      "versiti",
+      "es"
+    ],
+    "capacity": [
+      "capac",
+      "ity"
+    ],
+    "capabilities": [
+      "capabiliti",
+      "es"
+    ],
+    "capable": [
+      "cap",
+      "able"
+    ],
+    "security": [
+      "secur",
+      "ity"
+    ],
+    "secure": [
+      "sec",
+      "ure"
+    ],
+    "functionality": [
+      "functional",
+      "ity"
+    ],
+    "functional": [
+      "function",
+      "al"
+    ],
+    "function": [
+      "func",
+      "tion"
+    ],
+    "opportunity": [
+      "op",
+      "portun",
+      "ity"
+    ],
+    "opportunities": [
+      "op",
+      "portuniti",
+      "es"
+    ],
+    "specificity": [
+      "specific",
+      "ity"
+    ],
+    "specific": [
+      "specif",
+      "ic"
+    ],
+    "specifically": [
+      "specifical",
+      "ly"
+    ],
+    "complexity": [
+      "com",
+      "plex",
+      "ity"
+    ],
+    "complex": [
+      "com",
+      "plex"
+    ],
+    "complicated": [
+      "com",
+      "plicat",
+      "ed"
+    ],
+    "necessity": [
+      "necess",
+      "ity"
+    ],
+    "necessary": [
+      "necess",
+      "ary"
+    ],
+    "necessarily": [
+      "necessari",
+      "ly"
+    ],
+    "creativity": [
+      "creativ",
+      "ity"
+    ],
+    "creative": [
+      "creat",
+      "ive"
+    ],
+    "creation": [
+      "cre",
+      "ation"
+    ],
+    "create": [
+      "cre",
+      "ate"
+    ],
+    "sensitivity": [
+      "sensitiv",
+      "ity"
+    ],
+    "sensitive": [
+      "sensit",
+      "ive"
+    ],
+    "productivity": [
+      "pro",
+      "ductiv",
+      "ity"
+    ],
+    "productive": [
+      "pro",
+      "duct",
+      "ive"
+    ],
+    "product": [
+      "pro",
+      "duct"
+    ],
+    "production": [
+      "pro",
+      "duc",
+      "tion"
+    ],
+    "connectivity": [
+      "con",
+      "nectiv",
+      "ity"
+    ],
+    "connected": [
+      "con",
+      "nect",
+      "ed"
+    ],
+    "connection": [
+      "con",
+      "nec",
+      "tion"
+    ],
+    "connect": [
+      "con",
+      "nect"
+    ],
+    "diversity": [
+      "divers",
+      "ity"
+    ],
+    "diversify": [
+      "divers",
+      "ify"
+    ],
+    "intensity": [
+      "in",
+      "tens",
+      "ity"
+    ],
+    "intense": [
+      "in",
+      "tense"
+    ],
+    "intensive": [
+      "in",
+      "tens",
+      "ive"
+    ],
+    "unpredictability": [
+      "un",
+      "pre",
+      "dictabil",
+      "ity"
+    ],
+    "unpredictable": [
+      "un",
+      "pre",
+      "dict",
+      "able"
+    ],
+    "predict": [
+      "pre",
+      "dict"
+    ],
+    "prediction": [
+      "pre",
+      "dic",
+      "tion"
+    ],
+    "reproducibility": [
+      "re",
+      "pro",
+      "ducibil",
+      "ity"
+    ],
+    "reproducible": [
+      "re",
+      "pro",
+      "duc",
+      "ible"
+    ],
+    "reproduce": [
+      "re",
+      "pro",
+      "duce"
+    ],
+    "reproduction": [
+      "re",
+      "pro",
+      "duc",
+      "tion"
+    ],
+    "interpretability": [
+      "inter",
+      "pre",
+      "tabil",
+      "ity"
+    ],
+    "interpretable": [
+      "inter",
+      "pre",
+      "table"
+    ],
+    "interpret": [
+      "inter",
+      "pret"
+    ],
+    "interpretation": [
+      "inter",
+      "pre",
+      "tation"
+    ],
+    "generalizability": [
+      "generalizabil",
+      "ity"
+    ],
+    "generalizable": [
+      "generaliz",
+      "able"
+    ],
+    "generalize": [
+      "general",
+      "ize"
+    ],
+    "generalization": [
+      "generaliz",
+      "ation"
+    ],
+    "computational": [
+      "com",
+      "putation",
+      "al"
+    ],
+    "computation": [
+      "com",
+      "put",
+      "ation"
+    ],
+    "compute": [
+      "com",
+      "pute"
+    ],
+    "computer": [
+      "com",
+      "put",
+      "er"
+    ],
+    "computing": [
+      "com",
+      "put",
+      "ing"
+    ],
+    "mathematical": [
+      "mathemat",
+      "ical"
+    ],
+    "mathematics": [
+      "mathematic",
+      "s"
+    ],
+    "mathematician": [
+      "mathematic",
+      "ian"
+    ],
+    "theoretical": [
+      "theoret",
+      "ical"
+    ],
+    "theory": [
+      "the",
+      "ory"
+    ],
+    "theorize": [
+      "theor",
+      "ize"
+    ],
+    "practical": [
+      "pract",
+      "ical"
+    ],
+    "practitioner": [
+      "practition",
+      "er"
+    ],
+    "technical": [
+      "techn",
+      "ical"
+    ],
+    "technician": [
+      "technic",
+      "ian"
+    ],
+    "analytical": [
+      "analyt",
+      "ical"
+    ],
+    "analysis": [
+      "analysi",
+      "s"
+    ],
+    "empirical": [
+      "em",
+      "pir",
+      "ical"
+    ],
+    "empirically": [
+      "em",
+      "pirical",
+      "ly"
+    ],
+    "methodological": [
+      "methodolog",
+      "ical"
+    ],
+    "methodology": [
+      "methodolog",
+      "y"
+    ],
+    "statistical": [
+      "statist",
+      "ical"
+    ],
+    "statistics": [
+      "statistic",
+      "s"
+    ],
+    "statistician": [
+      "statistic",
+      "ian"
+    ],
+    "experimental": [
+      "ex",
+      "peri",
+      "ment",
+      "al"
+    ],
+    "experiment": [
+      "ex",
+      "peri",
+      "ment"
+    ],
+    "experimentation": [
+      "ex",
+      "peri",
+      "ment",
+      "ation"
+    ],
+    "conceptual": [
+      "con",
+      "ceptu",
+      "al"
+    ],
+    "conception": [
+      "con",
+      "cep",
+      "tion"
+    ],
+    "concept": [
+      "con",
+      "cept"
+    ],
+    "conceive": [
+      "con",
+      "ceive"
+    ],
+    "contextual": [
+      "con",
+      "textu",
+      "al"
+    ],
+    "context": [
+      "con",
+      "text"
+    ],
+    "structural": [
+      "structur",
+      "al"
+    ],
+    "structure": [
+      "struct",
+      "ure"
+    ],
+    "structuring": [
+      "structur",
+      "ing"
+    ],
+    "behavioral": [
+      "behavior",
+      "al"
+    ],
+    "behavior": [
+      "behavi",
+      "or"
+    ],
+    "operational": [
+      "op",
+      "eration",
+      "al"
+    ],
+    "operation": [
+      "op",
+      "era",
+      "tion"
+    ],
+    "operate": [
+      "op",
+      "erate"
+    ],
+    "operator": [
+      "op",
+      "erat",
+      "or"
+    ],
+    "functioning": [
+      "function",
+      "ing"
+    ],
+    "relational": [
+      "re",
+      "lation",
+      "al"
+    ],
+    "relation": [
+      "re",
+      "lation"
+    ],
+    "directional": [
+      "direction",
+      "al"
+    ],
+    "direction": [
+      "direc",
+      "tion"
+    ],
+    "traditional": [
+      "tradition",
+      "al"
+    ],
+    "tradition": [
+      "trad",
+      "ition"
+    ],
+    "additional": [
+      "addition",
+      "al"
+    ],
+    "addition": [
+      "add",
+      "ition"
+    ],
+    "conditional": [
+      "con",
+      "dition",
+      "al"
+    ],
+    "condition": [
+      "con",
+      "dition"
+    ],
+    "positional": [
+      "position",
+      "al"
+    ],
+    "position": [
+      "pos",
+      "ition"
+    ],
+    "positioning": [
+      "position",
+      "ing"
+    ],
+    "compositional": [
+      "com",
+      "position",
+      "al"
+    ],
+    "composition": [
+      "com",
+      "pos",
+      "ition"
+    ],
+    "compose": [
+      "com",
+      "pose"
+    ],
+    "composite": [
+      "com",
+      "posite"
+    ],
+    "transformational": [
+      "trans",
+      "formation",
+      "al"
+    ],
+    "transformation": [
+      "trans",
+      "form",
+      "ation"
+    ],
+    "transform": [
+      "trans",
+      "form"
+    ],
+    "transformer": [
+      "trans",
+      "form",
+      "er"
+    ],
+    "informational": [
+      "in",
+      "formation",
+      "al"
+    ],
+    "informative": [
+      "in",
+      "format",
+      "ive"
+    ],
+    "instructional": [
+      "in",
+      "struction",
+      "al"
+    ],
+    "instruction": [
+      "in",
+      "struc",
+      "tion"
+    ],
+    "instruct": [
+      "in",
+      "struct"
+    ],
+    "foundational": [
+      "foundation",
+      "al"
+    ],
+    "foundation": [
+      "found",
+      "ation"
+    ],
+    "motivational": [
+      "motivation",
+      "al"
+    ],
+    "motivation": [
+      "motiv",
+      "ation"
+    ],
+    "motivate": [
+      "motiv",
+      "ate"
+    ],
+    "motive": [
+      "mot",
+      "ive"
+    ],
+    "inspirational": [
+      "in",
+      "spiration",
+      "al"
+    ],
+    "inspiration": [
+      "in",
+      "spir",
+      "ation"
+    ],
+    "inspire": [
+      "in",
+      "spire"
+    ],
+    "educational": [
+      "education",
+      "al"
+    ],
+    "education": [
+      "educ",
+      "ation"
+    ],
+    "educate": [
+      "educ",
+      "ate"
+    ],
+    "organizational": [
+      "organization",
+      "al"
+    ]
+  },
+  "morpheme_freq": {
+    "thi": 5000,
+    "s": 25000,
+    "the": 6000,
+    "y": 18000,
+    "co": 5000,
+    "uld": 5000,
+    "oth": 5000,
+    "er": 19000,
+    "onl": 5000,
+    "aft": 5000,
+    "runn": 2000,
+    "ing": 12000,
+    "run": 5000,
+    "walk": 8000,
+    "ed": 10000,
+    "talk": 8000,
+    "happi": 3000,
+    "ness": 2000,
+    "happ": 5000,
+    "est": 2000,
+    "sad": 1000,
+    "sadd": 2000,
+    "im": 3000,
+    "poss": 2000,
+    "ible": 5000,
+    "possib": 1000,
+    "ly": 10000,
+    "un": 3000,
+    "com": 19000,
+    "fort": 3000,
+    "able": 6000,
+    "telecommunication": 1000,
+    "munic": 2000,
+    "ation": 16000,
+    "ate": 5000,
+    "inter": 5000,
+    "nation": 2000,
+    "al": 29000,
+    "anti": 1000,
+    "dis": 1000,
+    "establishmentarian": 1000,
+    "ism": 1000,
+    "pre": 11000,
+    "pro": 14000,
+    "cess": 2000,
+    "ces": 1000,
+    "multi": 1000,
+    "dimension": 2000,
+    "dimen": 1000,
+    "sion": 1000,
+    "bi": 1000,
+    "otechnolog": 1000,
+    "technolog": 2000,
+    "ical": 9000,
+    "re": 14000,
+    "sent": 2000,
+    "sentat": 1000,
+    "ive": 8000,
+    "under": 3000,
+    "stand": 2000,
+    "stood": 1000,
+    "de": 3000,
+    "velop": 3000,
+    "ment": 6000,
+    "in": 14000,
+    "form": 6000,
+    "applic": 1000,
+    "app": 5000,
+    "appli": 1000,
+    "govern": 2000,
+    "gov": 1000,
+    "ern": 1000,
+    "en": 3000,
+    "viron": 1000,
+    "vironment": 1000,
+    "perform": 2000,
+    "ance": 2000,
+    "ex": 5000,
+    "peri": 5000,
+    "ence": 2000,
+    "ced": 1000,
+    "differ": 2000,
+    "ent": 1000,
+    "diff": 1000,
+    "port": 2000,
+    "ant": 1000,
+    "lation": 3000,
+    "ship": 1000,
+    "late": 1000,
+    "lat": 1000,
+    "gener": 2000,
+    "generat": 1000,
+    "organiz": 2000,
+    "organ": 1000,
+    "ize": 3000,
+    "con": 15000,
+    "vers": 2000,
+    "verse": 1000,
+    "versation": 1000,
+    "babil": 1000,
+    "ity": 24000,
+    "bable": 1000,
+    "bab": 1000,
+    "availabil": 1000,
+    "avail": 1000,
+    "flexibil": 1000,
+    "flex": 1000,
+    "sponsibil": 1000,
+    "spons": 1000,
+    "mun": 1000,
+    "muniti": 1000,
+    "es": 5000,
+    "activ": 1000,
+    "activiti": 1000,
+    "act": 1000,
+    "uni": 2000,
+    "versiti": 1000,
+    "capac": 1000,
+    "capabiliti": 1000,
+    "cap": 1000,
+    "secur": 1000,
+    "sec": 1000,
+    "ure": 2000,
+    "functional": 1000,
+    "function": 2000,
+    "func": 1000,
+    "tion": 9000,
+    "op": 6000,
+    "portun": 1000,
+    "portuniti": 1000,
+    "specific": 1000,
+    "specif": 1000,
+    "ic": 1000,
+    "specifical": 1000,
+    "plex": 2000,
+    "plicat": 1000,
+    "necess": 2000,
+    "ary": 1000,
+    "necessari": 1000,
+    "creativ": 1000,
+    "creat": 1000,
+    "cre": 2000,
+    "sensitiv": 1000,
+    "sensit": 1000,
+    "ductiv": 1000,
+    "duct": 2000,
+    "duc": 3000,
+    "nectiv": 1000,
+    "nect": 2000,
+    "nec": 1000,
+    "divers": 2000,
+    "ify": 1000,
+    "tens": 2000,
+    "tense": 1000,
+    "dictabil": 1000,
+    "dict": 2000,
+    "dic": 1000,
+    "ducibil": 1000,
+    "duce": 1000,
+    "tabil": 1000,
+    "table": 1000,
+    "pret": 1000,
+    "tation": 1000,
+    "generalizabil": 1000,
+    "generaliz": 2000,
+    "general": 1000,
+    "putation": 1000,
+    "put": 3000,
+    "pute": 1000,
+    "mathemat": 1000,
+    "mathematic": 2000,
+    "ian": 3000,
+    "theoret": 1000,
+    "ory": 1000,
+    "theor": 1000,
+    "pract": 1000,
+    "practition": 1000,
+    "techn": 1000,
+    "technic": 1000,
+    "analyt": 1000,
+    "analysi": 1000,
+    "em": 2000,
+    "pir": 1000,
+    "pirical": 1000,
+    "methodolog": 2000,
+    "statist": 1000,
+    "statistic": 2000,
+    "ceptu": 1000,
+    "cep": 1000,
+    "cept": 1000,
+    "ceive": 1000,
+    "textu": 1000,
+    "text": 1000,
+    "structur": 2000,
+    "struct": 2000,
+    "behavior": 1000,
+    "behavi": 1000,
+    "or": 2000,
+    "eration": 1000,
+    "era": 1000,
+    "erate": 1000,
+    "erat": 1000,
+    "direction": 1000,
+    "direc": 1000,
+    "tradition": 1000,
+    "trad": 1000,
+    "ition": 4000,
+    "addition": 1000,
+    "add": 1000,
+    "dition": 2000,
+    "position": 3000,
+    "pos": 2000,
+    "pose": 1000,
+    "posite": 1000,
+    "trans": 4000,
+    "formation": 2000,
+    "format": 1000,
+    "struction": 1000,
+    "struc": 1000,
+    "foundation": 1000,
+    "found": 1000,
+    "motivation": 1000,
+    "motiv": 2000,
+    "mot": 1000,
+    "spiration": 1000,
+    "spir": 1000,
+    "spire": 1000,
+    "education": 1000,
+    "educ": 2000,
+    "organization": 1000
+  },
+  "stats": {
+    "num_roots": 178,
+    "num_prefixes": 21,
+    "num_suffixes": 36,
+    "num_lexicon_entries": 238,
+    "total_morphemes": 235
+  }
+}
