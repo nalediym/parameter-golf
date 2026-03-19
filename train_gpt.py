@@ -231,6 +231,7 @@ def eval_val(
     base_bytes_lut: Tensor,
     has_leading_space_lut: Tensor,
     is_boundary_token_lut: Tensor,
+    override_byte_count: int = 0,
 ) -> tuple[float, float]:
     # Validation computes two metrics:
     # - val_loss: token cross-entropy (natural log)
@@ -276,10 +277,16 @@ def eval_val(
         dist.all_reduce(val_byte_count, op=dist.ReduceOp.SUM)
 
     val_loss = val_loss_sum / val_token_count
-    bits_per_token = val_loss.item() / math.log(2.0)
-    tokens_per_byte = val_token_count.item() / val_byte_count.item()
+    total_nats = val_loss_sum.item()
+    if override_byte_count > 0:
+        # IPA mode: use original byte count for correct bpb
+        val_bpb = total_nats / (override_byte_count * math.log(2.0))
+    else:
+        bits_per_token = val_loss.item() / math.log(2.0)
+        tokens_per_byte = val_token_count.item() / val_byte_count.item()
+        val_bpb = bits_per_token * tokens_per_byte
     model.train()
-    return float(val_loss.item()), float(bits_per_token * tokens_per_byte)
+    return float(val_loss.item()), float(val_bpb)
 
 
 def eval_val_sliding(
@@ -294,6 +301,7 @@ def eval_val_sliding(
     is_boundary_token_lut: Tensor,
     stride: int,
     batch_seqs: int = 32,
+    override_byte_count: int = 0,
 ) -> tuple[float, float]:
     """Sliding window evaluation: each token scored with maximum context.
 
@@ -370,10 +378,15 @@ def eval_val_sliding(
         dist.all_reduce(byte_count, op=dist.ReduceOp.SUM)
 
     val_loss = (loss_sum / token_count).item()
-    bits_per_token = val_loss / math.log(2.0)
-    tokens_per_byte = token_count.item() / byte_count.item()
+    if override_byte_count > 0:
+        total_nats = loss_sum.item()
+        val_bpb = total_nats / (override_byte_count * math.log(2.0))
+    else:
+        bits_per_token = val_loss / math.log(2.0)
+        tokens_per_byte = token_count.item() / byte_count.item()
+        val_bpb = bits_per_token * tokens_per_byte
     base_model.train()
-    return val_loss, bits_per_token * tokens_per_byte
+    return val_loss, val_bpb
 
 
 # -----------------------------
@@ -527,19 +540,35 @@ def dequantize_state_dict_int8(obj: dict[str, object]) -> dict[str, Tensor]:
 
 def load_data_shard(file: Path) -> Tensor:
     header_bytes = 256 * np.dtype("<i4").itemsize
-    token_bytes = np.dtype("<u2").itemsize
     header = np.fromfile(file, dtype="<i4", count=256)
-    # SHARD HEADER INTS & SHARD_MAGIC
-    if header.size != 256 or int(header[0]) != 20240520 or int(header[1]) != 1:
+    if header.size != 256 or int(header[0]) != 20240520:
         raise ValueError(f"Unexpected shard header for {file}")
+    version = int(header[1])
     num_tokens = int(header[2])
-    expected_size = header_bytes + num_tokens * token_bytes
-    if file.stat().st_size != expected_size:
-        raise ValueError(f"Shard size mismatch for {file}: expected {expected_size} bytes")
-    tokens_np = np.fromfile(file, dtype="<u2", count=num_tokens, offset=header_bytes)
-    if tokens_np.size != num_tokens:
-        raise ValueError(f"Short read for {file}")
-    return torch.from_numpy(tokens_np.astype(np.uint16, copy=False))
+    if version == 1:
+        # BPE uint16 shards
+        token_bytes = np.dtype("<u2").itemsize
+        expected_size = header_bytes + num_tokens * token_bytes
+        if file.stat().st_size != expected_size:
+            raise ValueError(f"Shard size mismatch for {file}: expected {expected_size} bytes")
+        tokens_np = np.fromfile(file, dtype="<u2", count=num_tokens, offset=header_bytes)
+        return torch.from_numpy(tokens_np.astype(np.uint16, copy=False))
+    elif version == 2:
+        # IPA uint8 shards
+        tokens_np = np.fromfile(file, dtype=np.uint8, count=num_tokens, offset=header_bytes)
+        if tokens_np.size != num_tokens:
+            raise ValueError(f"Short read for {file}")
+        return torch.from_numpy(tokens_np.astype(np.int64, copy=False))
+    else:
+        raise ValueError(f"Unknown shard version {version} in {file}")
+
+
+def get_shard_original_bytes(file: Path) -> int:
+    """Read original byte count from IPA shard header (version 2 only)."""
+    header = np.fromfile(file, dtype="<i4", count=256)
+    if int(header[1]) == 2:
+        return int(header[3])
+    return 0
 
 
 class TokenStream:
@@ -921,20 +950,48 @@ def main() -> None:
     torch.manual_seed(args.seed)
     torch.cuda.manual_seed_all(args.seed)
 
-    if not args.tokenizer_path.endswith(".model"):
-        raise ValueError(f"Script only setup for SentencePiece .model file: {args.tokenizer_path}")
-    sp = spm.SentencePieceProcessor(model_file=args.tokenizer_path)
-    if int(sp.vocab_size()) != args.vocab_size:
-        raise ValueError(
-            f"VOCAB_SIZE={args.vocab_size} does not match tokenizer vocab_size={int(sp.vocab_size())}"
-        )
     dataset_dir = Path(args.data_path).resolve()
     actual_train_files = len(list(dataset_dir.glob("fineweb_train_*.bin")))
+
+    # Detect shard format from first available shard
+    first_shard = sorted(dataset_dir.glob("fineweb_train_*.bin")) or sorted(dataset_dir.glob("fineweb_val_*.bin"))
+    if not first_shard:
+        raise FileNotFoundError(f"No shards found in {dataset_dir}")
+    shard_version = int(np.fromfile(first_shard[0], dtype="<i4", count=4)[1])
+    is_ipa = shard_version == 2
+
+    if is_ipa:
+        # IPA mode: byte counts come from shard headers, no SentencePiece needed
+        log0(f"IPA mode detected (shard version 2), vocab_size={args.vocab_size}")
+        # Build simple LUTs: each IPA char = 1 byte in the IPA stream,
+        # but bpb denominator uses original_bytes from shard headers.
+        # For per-token bpb accounting, we set each token to 1 byte
+        # and correct the total using shard-level original byte counts.
+        table_size = args.vocab_size
+        base_bytes_lut = torch.ones(table_size, dtype=torch.int16, device=device)
+        has_leading_space_lut = torch.zeros(table_size, dtype=torch.bool, device=device)
+        is_boundary_token_lut = torch.zeros(table_size, dtype=torch.bool, device=device)
+
+        # Compute total original bytes from all validation shards for correct bpb
+        val_shard_files = sorted(dataset_dir.glob("fineweb_val_*.bin"))
+        ipa_val_original_bytes = sum(get_shard_original_bytes(f) for f in val_shard_files)
+        log0(f"IPA val original bytes: {ipa_val_original_bytes:,}")
+    else:
+        # BPE mode: use SentencePiece tokenizer
+        if not args.tokenizer_path.endswith(".model"):
+            raise ValueError(f"Script only setup for SentencePiece .model file: {args.tokenizer_path}")
+        sp = spm.SentencePieceProcessor(model_file=args.tokenizer_path)
+        if int(sp.vocab_size()) != args.vocab_size:
+            raise ValueError(
+                f"VOCAB_SIZE={args.vocab_size} does not match tokenizer vocab_size={int(sp.vocab_size())}"
+            )
+        base_bytes_lut, has_leading_space_lut, is_boundary_token_lut = build_sentencepiece_luts(
+            sp, args.vocab_size, device
+        )
+        ipa_val_original_bytes = 0
+        log0(f"BPE mode (shard version 1), tokenizer={args.tokenizer_path}")
+
     val_tokens = load_validation_tokens(args.val_files, args.train_seq_len)
-    base_bytes_lut, has_leading_space_lut, is_boundary_token_lut = build_sentencepiece_luts(
-        sp, args.vocab_size, device
-    )
-    log0(f"val_bpb:enabled tokenizer_kind=sentencepiece tokenizer_path={args.tokenizer_path}")
     log0(f"train_loader:dataset:{dataset_dir.name} train_shards:{actual_train_files}")
     log0(f"val_loader:shards pattern={args.val_files} tokens:{val_tokens.numel() - 1}")
 
@@ -1107,6 +1164,7 @@ def main() -> None:
                 base_bytes_lut,
                 has_leading_space_lut,
                 is_boundary_token_lut,
+                override_byte_count=ipa_val_original_bytes,
             )
             log0(
                 f"step:{step}/{args.iterations} val_loss:{val_loss:.4f} val_bpb:{val_bpb:.4f} "
@@ -1229,6 +1287,7 @@ def main() -> None:
         base_bytes_lut,
         has_leading_space_lut,
         is_boundary_token_lut,
+        override_byte_count=ipa_val_original_bytes,
     )
     torch.cuda.synchronize()
     log0(
@@ -1254,6 +1313,7 @@ def main() -> None:
             is_boundary_token_lut,
             stride=args.eval_stride,
             batch_seqs=args.eval_batch_seqs,
+            override_byte_count=ipa_val_original_bytes,
         )
         torch.cuda.synchronize()
         log0(
