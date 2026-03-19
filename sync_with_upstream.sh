@@ -27,3 +27,6 @@ echo "  Your fork is now up-to-date with openai/parameter-golf"
 echo ""
 echo "Current remotes:"
 git remote -v
+
+# Using gh CLI (alternative):
+# gh repo sync nalediym/parameter-golf --source openai/parameter-golf
