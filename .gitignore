@@ -14,3 +14,7 @@ best_ipa_model.pt
 training_log.txt
 data/ipa_converted/*.bin
 experiments/**/data/*.bin
+.claude/
+__pycache__/
+*.pt
+*.ptz
