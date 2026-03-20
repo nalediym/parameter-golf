@@ -94,8 +94,30 @@ class Hyperparameters:
     num_loops = int(os.environ.get("NUM_LOOPS", 1))
     lora_rank = int(os.environ.get("LORA_RANK", 0))
 
+    # Competitive stack options
+    qat = bool(int(os.environ.get("QAT", "0")))  # Enable int6 STE QAT during training
+    use_bigram_hash = bool(int(os.environ.get("USE_BIGRAM_HASH", "0")))
+    bigram_buckets = int(os.environ.get("BIGRAM_BUCKETS", 4096))
+    bigram_dim = int(os.environ.get("BIGRAM_DIM", 128))
+    use_smear_gate = bool(int(os.environ.get("USE_SMEAR_GATE", "0")))
+    ortho_init = bool(int(os.environ.get("ORTHO_INIT", "0")))
+
+class _FakeQuantizeInt6STE(torch.autograd.Function):  # Int6 STE QAT
+    @staticmethod
+    def forward(ctx, w: Tensor) -> Tensor:
+        w32 = w.float()
+        abs_max = w32.abs().amax(dim=1, keepdim=True).clamp_min(1e-12)
+        scale = abs_max / 31.0
+        q = torch.clamp(torch.round(w32 / scale), -32, 31)
+        return (q * scale).to(w.dtype)
+
+    @staticmethod
+    def backward(ctx, grad_output: Tensor) -> Tensor:
+        return grad_output  # straight-through
+
+fake_quantize_int6_ste = _FakeQuantizeInt6STE.apply
 # -----------------------------
-# MUON OPTIMIZER 
+# MUON OPTIMIZER
 # -----------------------------
 # 
 # As borrowed from modded-nanogpt
@@ -115,7 +137,6 @@ def zeropower_via_newtonschulz5(G: Tensor, steps: int = 10, eps: float = 1e-7) -
         B = b * A + c * A @ A
         X = a * X + B @ X
     return X.T if transposed else X
-
 
 class Muon(torch.optim.Optimizer):
     def __init__(self, params, lr: float, momentum: float, backend_steps: int, nesterov: bool = True):
@@ -175,7 +196,6 @@ class Muon(torch.optim.Optimizer):
 
         return loss
 
-
 # -----------------------------
 # TOKENIZER-AGNOSTIC EVALUATION SETUP 
 # -----------------------------
@@ -211,7 +231,6 @@ def build_sentencepiece_luts(
         torch.tensor(is_boundary_token_np, dtype=torch.bool, device=device),
     )
 
-
 def load_validation_tokens(pattern: str, seq_len: int) -> Tensor:
     files = [Path(p) for p in sorted(glob.glob(pattern))]
     if not files:
@@ -222,7 +241,6 @@ def load_validation_tokens(pattern: str, seq_len: int) -> Tensor:
     if usable <= 0:
         raise ValueError(f"Validation split is too short for TRAIN_SEQ_LEN={seq_len}")
     return tokens[: usable + 1]
-
 
 def eval_val(
     args: Hyperparameters,
@@ -291,7 +309,6 @@ def eval_val(
         val_bpb = bits_per_token * tokens_per_byte
     model.train()
     return float(val_loss.item()), float(val_bpb)
-
 
 def eval_val_sliding(
     args: Hyperparameters,
@@ -403,7 +420,6 @@ def eval_val_sliding(
         val_bpb = bits_per_token * tokens_per_byte
     base_model.train()
     return val_loss, val_bpb
-
 
 # -----------------------------
 # POST-TRAINING QUANTIZATION
@@ -549,7 +565,6 @@ def dequantize_state_dict_int8(obj: dict[str, object]) -> dict[str, Tensor]:
         out[name] = out_t
     return out
 
-
 # -----------------------------
 # DATA LOADING 
 # -----------------------------
@@ -584,14 +599,12 @@ def load_data_shard(file: Path) -> Tensor:
     else:
         raise ValueError(f"Unknown shard version {version} in {file}")
 
-
 def get_shard_original_bytes(file: Path) -> int:
     """Read original byte count from IPA shard header (version 2 only)."""
     header = np.fromfile(file, dtype="<i4", count=256)
     if int(header[1]) == 2:
         return int(header[3])
     return 0
-
 
 class TokenStream:
     # Reads shards sequentially and wraps around forever. The training loop therefore
@@ -622,7 +635,6 @@ class TokenStream:
             self.pos += k
             remaining -= k
         return chunks[0] if len(chunks) == 1 else torch.cat(chunks)
-
 
 class DistributedTokenLoader:
     # Each call consumes a contiguous chunk from the shared token stream, then slices out
@@ -655,13 +667,16 @@ class RMSNorm(nn.Module):
     def forward(self, x: Tensor) -> Tensor:
         return F.rms_norm(x, (x.size(-1),), eps=self.eps)
 
-
 class CastedLinear(nn.Linear):
     # Keep weights in fp32 for optimizer/state quality, cast at matmul time for bf16 compute.
-    def forward(self, x: Tensor) -> Tensor:
-        bias = self.bias.to(x.dtype) if self.bias is not None else None
-        return F.linear(x, self.weight.to(x.dtype), bias)
+    _qat: bool = False  # Enable int6 STE QAT during training
 
+    def forward(self, x: Tensor) -> Tensor:
+        w = self.weight.to(x.dtype)
+        if self._qat and self.training and w.ndim == 2:
+            w = fake_quantize_int6_ste(w)
+        bias = self.bias.to(x.dtype) if self.bias is not None else None
+        return F.linear(x, w, bias)
 
 def restore_low_dim_params_to_fp32(module: nn.Module) -> None:
     # Keep small/control parameters in fp32 even when the model body runs in bf16.
@@ -669,7 +684,6 @@ def restore_low_dim_params_to_fp32(module: nn.Module) -> None:
         for name, param in module.named_parameters():
             if (param.ndim < 2 or any(pattern in name for pattern in CONTROL_TENSOR_NAME_PATTERNS)) and param.dtype != torch.float32:
                 param.data = param.data.float()
-
 
 class Rotary(nn.Module):
     # Caches cos/sin tables per sequence length on the current device.
@@ -695,12 +709,10 @@ class Rotary(nn.Module):
             self._seq_len_cached = seq_len
         return self._cos_cached.to(dtype=dtype), self._sin_cached.to(dtype=dtype)
 
-
 def apply_rotary_emb(x: Tensor, cos: Tensor, sin: Tensor) -> Tensor:
     half = x.size(-1) // 2
     x1, x2 = x[..., :half], x[..., half:]
     return torch.cat((x1 * cos + x2 * sin, x1 * (-sin) + x2 * cos), dim=-1)
-
 
 class CausalSelfAttention(nn.Module):
     def __init__(
@@ -762,7 +774,6 @@ class CausalSelfAttention(nn.Module):
             out = out + (y @ lora.proj_A) @ lora.proj_B
         return out
 
-
 class AttentionLoRA(nn.Module):
     """Per-loop LoRA adapters for attention Q, K, V, and output projections.
     B matrices init to zero so LoRA contribution starts at zero."""
@@ -782,7 +793,6 @@ class AttentionLoRA(nn.Module):
         for name in ("q_A", "k_A", "v_A", "proj_A"):
             nn.init.kaiming_uniform_(getattr(self, name), a=math.sqrt(5))
 
-
 class MLP(nn.Module):
     # relu^2 MLP from the original modded-nanogpt setup
     def __init__(self, dim: int, mlp_mult: int):
@@ -795,7 +805,6 @@ class MLP(nn.Module):
     def forward(self, x: Tensor) -> Tensor:
         x = torch.relu(self.fc(x))
         return self.proj(x.square())
-
 
 class Block(nn.Module):
     def __init__(
@@ -824,6 +833,38 @@ class Block(nn.Module):
         x = x + self.mlp_scale.to(dtype=x.dtype)[None, None, :] * self.mlp(self.mlp_norm(x))
         return x
 
+class BigramHashEmbedding(nn.Module):
+    def __init__(self, bigram_vocab_size: int, bigram_dim: int, model_dim: int):
+        super().__init__()
+        self.bigram_vocab_size = bigram_vocab_size
+        self.embed = nn.Embedding(bigram_vocab_size, bigram_dim)
+        nn.init.zeros_(self.embed.weight)
+        self.proj = CastedLinear(bigram_dim, model_dim, bias=False)
+        nn.init.zeros_(self.proj.weight)
+        self.scale = nn.Parameter(torch.tensor(0.05))
+
+    def bigram_hash(self, tokens: Tensor) -> Tensor:
+        t = tokens.to(torch.int32)
+        mod = self.bigram_vocab_size - 1
+        out = torch.empty_like(t)
+        out[..., 0] = mod  # BOS bucket
+        out[..., 1:] = torch.bitwise_xor(36313 * t[..., 1:], 27191 * t[..., :-1]) % mod
+        return out.long()
+
+    def forward(self, token_ids: Tensor) -> Tensor:
+        h = self.embed(self.bigram_hash(token_ids))
+        return self.proj(h) * self.scale
+
+class SmearGate(nn.Module):
+    """Learned gate blending each token's embedding with the previous token's."""
+    def __init__(self, dim: int):
+        super().__init__()
+        self.gate = nn.Parameter(torch.zeros(dim))
+
+    def forward(self, x: Tensor) -> Tensor:
+        g = torch.sigmoid(self.gate.to(dtype=x.dtype))[None, None, :]
+        x_prev = torch.cat([torch.zeros_like(x[:, :1]), x[:, :-1]], dim=1)
+        return (1 - g) * x + g * x_prev
 
 class GPT(nn.Module):
     def __init__(
@@ -841,6 +882,11 @@ class GPT(nn.Module):
         qk_gain_init: float,
         num_loops: int = 1,
         lora_rank: int = 0,
+        use_bigram_hash: bool = False,
+        bigram_buckets: int = 4096,
+        bigram_dim: int = 128,
+        use_smear_gate: bool = False,
+        ortho_init: bool = False,
     ):
         super().__init__()
         if logit_softcap <= 0.0:
@@ -882,18 +928,27 @@ class GPT(nn.Module):
             )
         else:
             self.lora_adapters = None
+        self.bigram = BigramHashEmbedding(bigram_buckets, bigram_dim, model_dim) if use_bigram_hash else None
+        self.smear_gate = SmearGate(model_dim) if use_smear_gate else None
         self.final_norm = RMSNorm()
         self.lm_head = None if tie_embeddings else CastedLinear(model_dim, vocab_size, bias=False)
         if self.lm_head is not None:
             self.lm_head._zero_init = True
+        self._ortho_init = ortho_init
         self._init_weights()
 
     def _init_weights(self) -> None:
         if self.tie_embeddings:
             nn.init.normal_(self.tok_emb.weight, mean=0.0, std=self.tied_embed_init_std)
-        for module in self.modules():
-            if isinstance(module, nn.Linear) and getattr(module, "_zero_init", False):
-                nn.init.zeros_(module.weight)
+        num_layers = len(self.blocks)
+        for name, module in self.named_modules():
+            if isinstance(module, nn.Linear):
+                if getattr(module, "_zero_init", False):
+                    nn.init.zeros_(module.weight)
+                elif self._ortho_init and module.weight.ndim == 2 and min(module.weight.shape) >= 64:
+                    nn.init.orthogonal_(module.weight, gain=1.0)
+                    if ".proj" in name:
+                        module.weight.data.mul_(1.0 / math.sqrt(2 * num_layers))
 
     def _run_blocks(self, x: Tensor, x0: Tensor) -> Tensor:
         """Run transformer blocks with optional looping and LoRA."""
@@ -913,8 +968,17 @@ class GPT(nn.Module):
                 eff_idx += 1
         return x
 
-    def forward(self, input_ids: Tensor, target_ids: Tensor) -> Tensor:
+    def _embed(self, input_ids: Tensor) -> Tensor:
+        """Token embedding + optional bigram hash + smear gate."""
         x = self.tok_emb(input_ids)
+        if self.bigram is not None:
+            x = x + self.bigram(input_ids)
+        if self.smear_gate is not None:
+            x = self.smear_gate(x)
+        return x
+
+    def forward(self, input_ids: Tensor, target_ids: Tensor) -> Tensor:
+        x = self._embed(input_ids)
         x = F.rms_norm(x, (x.size(-1),))
         x0 = x
         x = self._run_blocks(x, x0)
@@ -932,7 +996,7 @@ class GPT(nn.Module):
 
     def forward_logits(self, input_ids: Tensor) -> Tensor:
         """Return logits (bsz, seq_len, vocab) without computing loss."""
-        x = self.tok_emb(input_ids)
+        x = self._embed(input_ids)
         x = F.rms_norm(x, (x.size(-1),))
         x0 = x
         x = self._run_blocks(x, x0)
@@ -942,7 +1006,6 @@ class GPT(nn.Module):
         else:
             logits_proj = self.lm_head(x)
         return self.logit_softcap * torch.tanh(logits_proj / self.logit_softcap)
-
 
 # -----------------------------
 # TRAINING
@@ -1085,11 +1148,23 @@ def main() -> None:
         qk_gain_init=args.qk_gain_init,
         num_loops=args.num_loops,
         lora_rank=args.lora_rank,
+        use_bigram_hash=args.use_bigram_hash,
+        bigram_buckets=args.bigram_buckets,
+        bigram_dim=args.bigram_dim,
+        use_smear_gate=args.use_smear_gate,
+        ortho_init=args.ortho_init,
     ).to(device).bfloat16()
     for module in base_model.modules():
         if isinstance(module, CastedLinear):
             module.float()
     restore_low_dim_params_to_fp32(base_model)
+
+    # Enable QAT if requested
+    if args.qat:
+        for module in base_model.modules():
+            if isinstance(module, CastedLinear):
+                module._qat = True
+        log0("QAT enabled: int6 STE fake-quantization during training")
     compiled_model = torch.compile(base_model, dynamic=False, fullgraph=True)
     model: nn.Module = DDP(compiled_model, device_ids=[local_rank], broadcast_buffers=False) if distributed else compiled_model
 
@@ -1420,7 +1495,6 @@ def main() -> None:
 
     if distributed:
         dist.destroy_process_group()
-
 
 if __name__ == "__main__":
     main()

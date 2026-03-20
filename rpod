@@ -538,6 +538,55 @@ cmd_baseline() {
     cmd_push
 }
 
+cmd_train_competitive() {
+    local GPUS=$(detect_gpus)
+    [ "$GPUS" -eq 0 ] && GPUS=1
+    local LOGFILE="$LOGDIR/train_competitive_${TIMESTAMP}.log"
+
+    log "=== COMPETITIVE STACK (${GPUS}xGPU) ==="
+    log "Int6 QAT + MLP3x + OrthoInit + BigramHash + SmearGate + seq=2048"
+    start_timer "Competitive" "$((${MAX_WALLCLOCK_SECONDS:-600} * 2))"
+
+    local rc=0
+    RUN_ID="competitive_${TIMESTAMP}" \
+    VOCAB_SIZE=1024 \
+    TRAIN_SEQ_LEN=2048 \
+    MLP_MULT=3 \
+    QAT=1 \
+    ORTHO_INIT=1 \
+    USE_BIGRAM_HASH=1 \
+    USE_SMEAR_GATE=1 \
+    MATRIX_LR=0.02 \
+    SCALAR_LR=0.02 \
+    MUON_MOMENTUM=0.99 \
+    WARMDOWN_ITERS=3000 \
+    GRAD_CLIP_NORM=0.3 \
+    TRAIN_BATCH_TOKENS=786432 \
+    EVAL_STRIDE=64 \
+    EVAL_BATCH_SEQS=1024 \
+    VAL_LOSS_EVERY=1000 \
+    MAX_WALLCLOCK_SECONDS="${MAX_WALLCLOCK_SECONDS:-600}" \
+    torchrun --standalone --nproc_per_node="$GPUS" train_gpt.py \
+        2>&1 | tee "$LOGFILE" || rc=$?
+
+    stop_timer
+    if [ $rc -ne 0 ]; then
+        log "COMPETITIVE TRAINING FAILED (exit code $rc). Log: $LOGFILE"
+        return $rc
+    fi
+
+    [ -f "final_model.int8.ptz" ] && \
+        cp final_model.int8.ptz "$ARTIFACTDIR/competitive_${TIMESTAMP}.int8.ptz"
+
+    local BPB=$(extract_bpb "$LOGFILE")
+    log "Competitive done. val_bpb=$BPB Log: $LOGFILE"
+    notify "COMPETITIVE STACK Complete" "**val_bpb: $BPB**
+- Config: MLP3x + QAT + OrthoInit + BigramHash + SmearGate + seq=2048
+- Tuned: lr=0.02, momentum=0.99, warmdown=3000, grad_clip=0.3, batch=786K
+- Log: \`$LOGFILE\`"
+    cmd_push
+}
+
 cmd_train_seq2048() {
     local GPUS=$(detect_gpus)
     [ "$GPUS" -eq 0 ] && GPUS=1
@@ -793,6 +842,7 @@ case "${1:-help}" in
     convert-ipa-bpe) cmd_convert_ipa_bpe "${2:-1}" ;;
     train-ipa-bpe)   cmd_preflight && cmd_train_ipa_bpe ;;
     preflight)        cmd_preflight ;;
+    competitive)      cmd_preflight && cmd_train_competitive ;;
     train-seq2048)    cmd_preflight && cmd_train_seq2048 ;;
     train-loop)       cmd_preflight && cmd_train_loop ;;
     cost)     cmd_cost ;;
