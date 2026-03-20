@@ -221,6 +221,54 @@ print('GATE PASSED')
 " 2>&1 | tee -a "$LOGFILE"
 }
 
+cmd_convert_ipa_bpe() {
+    local SHARDS="${1:-1}"
+    local LOGFILE="$LOGDIR/convert_ipa_bpe_${SHARDS}shards_${TIMESTAMP}.log"
+
+    log "=== Converting $SHARDS shard(s) to IPA-BPE ==="
+    log "Log: $LOGFILE"
+
+    python3 convert_fineweb_to_ipa_bpe_shards.py \
+        --shards "$SHARDS" \
+        --output-dir data/datasets/fineweb10B_ipa_bpe \
+        2>&1 | tee "$LOGFILE"
+
+    log "IPA-BPE conversion done. Log: $LOGFILE"
+}
+
+cmd_train_ipa_bpe() {
+    local GPUS=$(detect_gpus)
+    [ "$GPUS" -eq 0 ] && GPUS=1
+    local LOGFILE="$LOGDIR/train_ipa_bpe_${TIMESTAMP}.log"
+
+    log "=== IPA-BPE training (${GPUS}xGPU, ${MAX_WALLCLOCK_SECONDS:-600}s) ==="
+    start_timer "IPA-BPE training" "${MAX_WALLCLOCK_SECONDS:-600}"
+
+    local rc=0
+    RUN_ID="ipa_bpe_${TIMESTAMP}" \
+    DATA_PATH=./data/datasets/fineweb10B_ipa_bpe/ \
+    TOKENIZER_PATH=./data/tokenizers/ipa_bpe_1024.model \
+    VOCAB_SIZE=1024 \
+    EVAL_STRIDE=64 \
+    EVAL_BATCH_SEQS=1024 \
+    VAL_LOSS_EVERY=1000 \
+    MAX_WALLCLOCK_SECONDS="${MAX_WALLCLOCK_SECONDS:-600}" \
+    torchrun --standalone --nproc_per_node="$GPUS" train_gpt.py \
+        2>&1 | tee "$LOGFILE" || rc=$?
+
+    stop_timer
+
+    if [ $rc -ne 0 ]; then
+        log "IPA-BPE TRAINING FAILED (exit code $rc). Log: $LOGFILE"
+        return $rc
+    fi
+
+    [ -f "final_model.int8.ptz" ] && \
+        cp final_model.int8.ptz "$ARTIFACTDIR/ipa_bpe_${TIMESTAMP}.int8.ptz"
+
+    log "IPA-BPE training done. Log: $LOGFILE"
+}
+
 cmd_smoke() {
     local GPUS=$(detect_gpus)
     [ "$GPUS" -eq 0 ] && GPUS=1
@@ -491,6 +539,8 @@ case "${1:-help}" in
     train)    cmd_train ;;
     baseline) cmd_baseline ;;
     all)      cmd_all ;;
+    convert-ipa-bpe) cmd_convert_ipa_bpe "${2:-1}" ;;
+    train-ipa-bpe)   cmd_train_ipa_bpe ;;
     cost)     cmd_cost ;;
     results)  cmd_results ;;
     next)     cmd_next ;;
@@ -507,10 +557,12 @@ Git:
 
 Experiments:
   rpod setup           Pull + download data + test
-  rpod convert [N]     Convert N shards to IPA (default: 1)
-  rpod smoke           50-step training smoke test
-  rpod train           Full 10-min IPA training
+  rpod convert [N]     Convert N shards to IPA char-level (default: 1)
+  rpod smoke           50-step IPA char-level smoke test
+  rpod train           Full 10-min IPA char-level training
   rpod baseline        BPE baseline with sliding window eval
+  rpod convert-ipa-bpe [N]  Convert N shards to IPA-BPE (default: 1)
+  rpod train-ipa-bpe   Full 10-min IPA-BPE training
   rpod all             Everything end-to-end
 
 Dashboard:
