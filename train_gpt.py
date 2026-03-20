@@ -48,7 +48,7 @@ class Hyperparameters:
     # Validation cadence and batch size. Validation always uses the full fineweb_val split.
     val_batch_size = int(os.environ.get("VAL_BATCH_SIZE", 524_288))
     val_loss_every = int(os.environ.get("VAL_LOSS_EVERY", 1000))
-    train_log_every = int(os.environ.get("TRAIN_LOG_EVERY", 200))
+    train_log_every = int(os.environ.get("TRAIN_LOG_EVERY", 50))
 
     # Training length.
     iterations = int(os.environ.get("ITERATIONS", 20000))
@@ -1289,6 +1289,13 @@ def main() -> None:
             for group in opt.param_groups:
                 group["lr"] = group["base_lr"] * scale
 
+        # Compute gradient norm before clipping (for logging)
+        grad_norm = 0.0
+        for p in base_model.parameters():
+            if p.grad is not None:
+                grad_norm += p.grad.data.float().norm().item() ** 2
+        grad_norm = grad_norm ** 0.5
+
         if args.grad_clip_norm > 0:
             torch.nn.utils.clip_grad_norm_(base_model.parameters(), args.grad_clip_norm)
         for opt in optimizers:
@@ -1302,8 +1309,12 @@ def main() -> None:
             and (step <= 10 or step % args.train_log_every == 0 or stop_after_step is not None)
         )
         if should_log_train:
+            current_lr = optimizers[0].param_groups[0]["lr"]
+            tok_per_sec = (step * args.train_batch_tokens) / (approx_training_time_ms / 1000.0)
             log0(
                 f"step:{step}/{args.iterations} train_loss:{train_loss.item():.4f} "
+                f"lr:{current_lr:.6f} grad_norm:{grad_norm:.2f} "
+                f"tok/s:{tok_per_sec:.0f} "
                 f"train_time:{approx_training_time_ms:.0f}ms step_avg:{approx_training_time_ms / step:.2f}ms"
             )
 
