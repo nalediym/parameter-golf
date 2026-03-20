@@ -417,6 +417,84 @@ cmd_baseline() {
     cmd_push
 }
 
+cmd_train_seq2048() {
+    local GPUS=$(detect_gpus)
+    [ "$GPUS" -eq 0 ] && GPUS=1
+    local LOGFILE="$LOGDIR/train_seq2048_${TIMESTAMP}.log"
+
+    log "=== IPA-BPE + seq=2048 (${GPUS}xGPU) ==="
+    start_timer "seq2048 training" "${MAX_WALLCLOCK_SECONDS:-600}"
+
+    local rc=0
+    RUN_ID="ipa_bpe_seq2048_${TIMESTAMP}" \
+    DATA_PATH=./data/datasets/fineweb10B_ipa_bpe/ \
+    TOKENIZER_PATH=./data/tokenizers/ipa_bpe_1024.model \
+    VOCAB_SIZE=1024 \
+    TRAIN_SEQ_LEN=2048 \
+    EVAL_STRIDE=64 \
+    EVAL_BATCH_SEQS=1024 \
+    VAL_LOSS_EVERY=1000 \
+    MAX_WALLCLOCK_SECONDS="${MAX_WALLCLOCK_SECONDS:-600}" \
+    torchrun --standalone --nproc_per_node="$GPUS" train_gpt.py \
+        2>&1 | tee "$LOGFILE" || rc=$?
+
+    stop_timer
+    if [ $rc -ne 0 ]; then
+        log "SEQ2048 TRAINING FAILED (exit code $rc). Log: $LOGFILE"
+        return $rc
+    fi
+
+    [ -f "final_model.int8.ptz" ] && \
+        cp final_model.int8.ptz "$ARTIFACTDIR/ipa_bpe_seq2048_${TIMESTAMP}.int8.ptz"
+
+    local BPB=$(extract_bpb "$LOGFILE")
+    log "seq2048 done. val_bpb=$BPB Log: $LOGFILE"
+    notify "IPA-BPE seq=2048 Complete" "**val_bpb: $BPB**
+- Config: seq=2048, 9 layers, no looping
+- Log: \`$LOGFILE\`"
+    cmd_push
+}
+
+cmd_train_loop() {
+    local GPUS=$(detect_gpus)
+    [ "$GPUS" -eq 0 ] && GPUS=1
+    local LOGFILE="$LOGDIR/train_loop_${TIMESTAMP}.log"
+
+    log "=== IPA-BPE + seq=2048 + 5 layers × 2 loops (${GPUS}xGPU) ==="
+    start_timer "loop training" "${MAX_WALLCLOCK_SECONDS:-600}"
+
+    local rc=0
+    RUN_ID="ipa_bpe_loop_${TIMESTAMP}" \
+    DATA_PATH=./data/datasets/fineweb10B_ipa_bpe/ \
+    TOKENIZER_PATH=./data/tokenizers/ipa_bpe_1024.model \
+    VOCAB_SIZE=1024 \
+    TRAIN_SEQ_LEN=2048 \
+    NUM_LAYERS=5 \
+    NUM_LOOPS=2 \
+    EVAL_STRIDE=64 \
+    EVAL_BATCH_SEQS=1024 \
+    VAL_LOSS_EVERY=1000 \
+    MAX_WALLCLOCK_SECONDS="${MAX_WALLCLOCK_SECONDS:-600}" \
+    torchrun --standalone --nproc_per_node="$GPUS" train_gpt.py \
+        2>&1 | tee "$LOGFILE" || rc=$?
+
+    stop_timer
+    if [ $rc -ne 0 ]; then
+        log "LOOP TRAINING FAILED (exit code $rc). Log: $LOGFILE"
+        return $rc
+    fi
+
+    [ -f "final_model.int8.ptz" ] && \
+        cp final_model.int8.ptz "$ARTIFACTDIR/ipa_bpe_loop_${TIMESTAMP}.int8.ptz"
+
+    local BPB=$(extract_bpb "$LOGFILE")
+    log "loop training done. val_bpb=$BPB Log: $LOGFILE"
+    notify "IPA-BPE 5×2 Loop Complete" "**val_bpb: $BPB**
+- Config: seq=2048, 5 layers × 2 loops, effective depth=10
+- Log: \`$LOGFILE\`"
+    cmd_push
+}
+
 cmd_all() {
     cmd_setup
     cmd_convert 1
@@ -593,6 +671,8 @@ case "${1:-help}" in
     all)      cmd_all ;;
     convert-ipa-bpe) cmd_convert_ipa_bpe "${2:-1}" ;;
     train-ipa-bpe)   cmd_train_ipa_bpe ;;
+    train-seq2048)    cmd_train_seq2048 ;;
+    train-loop)       cmd_train_loop ;;
     cost)     cmd_cost ;;
     results)  cmd_results ;;
     next)     cmd_next ;;

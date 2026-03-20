@@ -90,6 +90,10 @@ class Hyperparameters:
     eval_stride = int(os.environ.get("EVAL_STRIDE", 0))
     eval_batch_seqs = int(os.environ.get("EVAL_BATCH_SEQS", 32))
 
+    # Layer looping. num_loops=1 means no looping (default). lora_rank=0 disables LoRA.
+    num_loops = int(os.environ.get("NUM_LOOPS", 1))
+    lora_rank = int(os.environ.get("LORA_RANK", 0))
+
 # -----------------------------
 # MUON OPTIMIZER 
 # -----------------------------
@@ -726,11 +730,18 @@ class CausalSelfAttention(nn.Module):
         self.q_gain = nn.Parameter(torch.full((num_heads,), qk_gain_init, dtype=torch.float32))
         self.rotary = Rotary(self.head_dim, base=rope_base)
 
-    def forward(self, x: Tensor) -> Tensor:
+    def forward(self, x: Tensor, lora: AttentionLoRA | None = None) -> Tensor:
         bsz, seqlen, dim = x.shape
-        q = self.c_q(x).reshape(bsz, seqlen, self.num_heads, self.head_dim).transpose(1, 2)
-        k = self.c_k(x).reshape(bsz, seqlen, self.num_kv_heads, self.head_dim).transpose(1, 2)
-        v = self.c_v(x).reshape(bsz, seqlen, self.num_kv_heads, self.head_dim).transpose(1, 2)
+        q = self.c_q(x)
+        k = self.c_k(x)
+        v = self.c_v(x)
+        if lora is not None:
+            q = q + (x @ lora.q_A) @ lora.q_B
+            k = k + (x @ lora.k_A) @ lora.k_B
+            v = v + (x @ lora.v_A) @ lora.v_B
+        q = q.reshape(bsz, seqlen, self.num_heads, self.head_dim).transpose(1, 2)
+        k = k.reshape(bsz, seqlen, self.num_kv_heads, self.head_dim).transpose(1, 2)
+        v = v.reshape(bsz, seqlen, self.num_kv_heads, self.head_dim).transpose(1, 2)
         q = F.rms_norm(q, (q.size(-1),))
         k = F.rms_norm(k, (k.size(-1),))
         cos, sin = self.rotary(seqlen, x.device, q.dtype)
@@ -746,7 +757,30 @@ class CausalSelfAttention(nn.Module):
             enable_gqa=(self.num_kv_heads != self.num_heads),
         )
         y = y.transpose(1, 2).contiguous().reshape(bsz, seqlen, dim)
-        return self.proj(y)
+        out = self.proj(y)
+        if lora is not None:
+            out = out + (y @ lora.proj_A) @ lora.proj_B
+        return out
+
+
+class AttentionLoRA(nn.Module):
+    """Per-loop LoRA adapters for attention Q, K, V, and output projections.
+    B matrices init to zero so LoRA contribution starts at zero."""
+    def __init__(self, dim: int, kv_dim: int, rank: int):
+        super().__init__()
+        self.q_A = nn.Parameter(torch.empty(dim, rank))
+        self.q_B = nn.Parameter(torch.zeros(rank, dim))
+        self.k_A = nn.Parameter(torch.empty(dim, rank))
+        self.k_B = nn.Parameter(torch.zeros(rank, kv_dim))
+        self.v_A = nn.Parameter(torch.empty(dim, rank))
+        self.v_B = nn.Parameter(torch.zeros(rank, kv_dim))
+        self.proj_A = nn.Parameter(torch.empty(dim, rank))
+        self.proj_B = nn.Parameter(torch.zeros(rank, dim))
+        self._init_lora()
+
+    def _init_lora(self) -> None:
+        for name in ("q_A", "k_A", "v_A", "proj_A"):
+            nn.init.kaiming_uniform_(getattr(self, name), a=math.sqrt(5))
 
 
 class MLP(nn.Module):
@@ -782,10 +816,10 @@ class Block(nn.Module):
         self.mlp_scale = nn.Parameter(torch.ones(dim, dtype=torch.float32))
         self.resid_mix = nn.Parameter(torch.stack((torch.ones(dim), torch.zeros(dim))).float())
 
-    def forward(self, x: Tensor, x0: Tensor) -> Tensor:
+    def forward(self, x: Tensor, x0: Tensor, lora: AttentionLoRA | None = None) -> Tensor:
         mix = self.resid_mix.to(dtype=x.dtype)
         x = mix[0][None, None, :] * x + mix[1][None, None, :] * x0
-        attn_out = self.attn(self.attn_norm(x))
+        attn_out = self.attn(self.attn_norm(x), lora=lora)
         x = x + self.attn_scale.to(dtype=x.dtype)[None, None, :] * attn_out
         x = x + self.mlp_scale.to(dtype=x.dtype)[None, None, :] * self.mlp(self.mlp_norm(x))
         return x
@@ -805,6 +839,8 @@ class GPT(nn.Module):
         logit_softcap: float,
         rope_base: float,
         qk_gain_init: float,
+        num_loops: int = 1,
+        lora_rank: int = 0,
     ):
         super().__init__()
         if logit_softcap <= 0.0:
@@ -812,9 +848,12 @@ class GPT(nn.Module):
         self.tie_embeddings = tie_embeddings
         self.tied_embed_init_std = tied_embed_init_std
         self.logit_softcap = logit_softcap
+        self.num_unique_layers = num_layers
+        self.num_loops = num_loops
+        effective_depth = num_layers * num_loops
         self.tok_emb = nn.Embedding(vocab_size, model_dim)
-        self.num_encoder_layers = num_layers // 2
-        self.num_decoder_layers = num_layers - self.num_encoder_layers
+        self.num_encoder_layers = effective_depth // 2
+        self.num_decoder_layers = effective_depth - self.num_encoder_layers
         self.num_skip_weights = min(self.num_encoder_layers, self.num_decoder_layers)
         self.skip_weights = nn.Parameter(torch.ones(self.num_skip_weights, model_dim, dtype=torch.float32))
         self.blocks = nn.ModuleList(
@@ -830,6 +869,19 @@ class GPT(nn.Module):
                 for i in range(num_layers)
             ]
         )
+        # Per-(loop, block) LoRA adapters for attention projections.
+        kv_dim = num_kv_heads * (model_dim // num_heads)
+        if lora_rank > 0 and num_loops > 1:
+            self.lora_adapters = nn.ModuleList(
+                [
+                    nn.ModuleList(
+                        [AttentionLoRA(model_dim, kv_dim, lora_rank) for _ in range(num_layers)]
+                    )
+                    for _ in range(num_loops)
+                ]
+            )
+        else:
+            self.lora_adapters = None
         self.final_norm = RMSNorm()
         self.lm_head = None if tie_embeddings else CastedLinear(model_dim, vocab_size, bias=False)
         if self.lm_head is not None:
@@ -843,20 +895,29 @@ class GPT(nn.Module):
             if isinstance(module, nn.Linear) and getattr(module, "_zero_init", False):
                 nn.init.zeros_(module.weight)
 
+    def _run_blocks(self, x: Tensor, x0: Tensor) -> Tensor:
+        """Run transformer blocks with optional looping and LoRA."""
+        skips: list[Tensor] = []
+        eff_idx = 0
+        for loop_idx in range(self.num_loops):
+            for block_idx in range(self.num_unique_layers):
+                lora = self.lora_adapters[loop_idx][block_idx] if self.lora_adapters is not None else None
+                if eff_idx < self.num_encoder_layers:
+                    x = self.blocks[block_idx](x, x0, lora=lora)
+                    skips.append(x)
+                else:
+                    dec_idx = eff_idx - self.num_encoder_layers
+                    if dec_idx < self.num_skip_weights and skips:
+                        x = x + self.skip_weights[dec_idx].to(dtype=x.dtype)[None, None, :] * skips.pop()
+                    x = self.blocks[block_idx](x, x0, lora=lora)
+                eff_idx += 1
+        return x
+
     def forward(self, input_ids: Tensor, target_ids: Tensor) -> Tensor:
         x = self.tok_emb(input_ids)
         x = F.rms_norm(x, (x.size(-1),))
         x0 = x
-        skips: list[Tensor] = []
-
-        # First half stores skips; second half reuses them in reverse order.
-        for i in range(self.num_encoder_layers):
-            x = self.blocks[i](x, x0)
-            skips.append(x)
-        for i in range(self.num_decoder_layers):
-            if skips:
-                x = x + self.skip_weights[i].to(dtype=x.dtype)[None, None, :] * skips.pop()
-            x = self.blocks[self.num_encoder_layers + i](x, x0)
+        x = self._run_blocks(x, x0)
 
         x = self.final_norm(x).reshape(-1, x.size(-1))
         targets = target_ids.reshape(-1)
@@ -874,14 +935,7 @@ class GPT(nn.Module):
         x = self.tok_emb(input_ids)
         x = F.rms_norm(x, (x.size(-1),))
         x0 = x
-        skips: list[Tensor] = []
-        for i in range(self.num_encoder_layers):
-            x = self.blocks[i](x, x0)
-            skips.append(x)
-        for i in range(self.num_decoder_layers):
-            if skips:
-                x = x + self.skip_weights[i].to(dtype=x.dtype)[None, None, :] * skips.pop()
-            x = self.blocks[self.num_encoder_layers + i](x, x0)
+        x = self._run_blocks(x, x0)
         x = self.final_norm(x)
         if self.tie_embeddings:
             logits_proj = F.linear(x, self.tok_emb.weight)
@@ -1029,6 +1083,8 @@ def main() -> None:
         logit_softcap=args.logit_softcap,
         rope_base=args.rope_base,
         qk_gain_init=args.qk_gain_init,
+        num_loops=args.num_loops,
+        lora_rank=args.lora_rank,
     ).to(device).bfloat16()
     for module in base_model.modules():
         if isinstance(module, CastedLinear):
@@ -1077,6 +1133,15 @@ def main() -> None:
         fused=True,
     )
     optimizers: list[torch.optim.Optimizer] = [optimizer_tok, optimizer_muon, optimizer_scalar]
+    if base_model.lora_adapters is not None:
+        lora_params = list(base_model.lora_adapters.parameters())
+        optimizer_lora = torch.optim.Adam(
+            [{"params": lora_params, "lr": args.matrix_lr, "base_lr": args.matrix_lr}],
+            betas=(args.beta1, args.beta2),
+            eps=args.adam_eps,
+            fused=True,
+        )
+        optimizers.append(optimizer_lora)
     if base_model.lm_head is not None:
         optimizer_head = torch.optim.Adam(
             [{"params": [base_model.lm_head.weight], "lr": args.head_lr, "base_lr": args.head_lr}],
@@ -1087,7 +1152,9 @@ def main() -> None:
         optimizers.insert(1, optimizer_head)
 
     n_params = sum(p.numel() for p in base_model.parameters())
-    log0(f"model_params:{n_params}")
+    n_lora = sum(p.numel() for p in base_model.lora_adapters.parameters()) if base_model.lora_adapters is not None else 0
+    effective_depth = args.num_layers * args.num_loops
+    log0(f"model_params:{n_params} (unique_layers:{args.num_layers} loops:{args.num_loops} effective_depth:{effective_depth} lora_rank:{args.lora_rank} lora_params:{n_lora})")
     log0(f"world_size:{world_size} grad_accum_steps:{grad_accum_steps}")
     log0("sdp_backends:cudnn=False flash=True mem_efficient=False math=False")
     log0(f"attention_mode:gqa num_heads:{args.num_heads} num_kv_heads:{args.num_kv_heads}")
