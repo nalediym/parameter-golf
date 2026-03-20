@@ -36,6 +36,44 @@ cd "$WORKDIR"
 
 log() { echo "[$(date +%H:%M:%S)] $*"; }
 
+# Post results to GitHub issue for cross-terminal notifications
+notify() {
+    local title="$1"
+    local body="$2"
+    local ISSUE_NUM=""
+
+    # Find or create the results tracking issue
+    ISSUE_NUM=$(gh issue list --label "rpod-results" --json number -q '.[0].number' 2>/dev/null || true)
+
+    if [ -z "$ISSUE_NUM" ]; then
+        # Create the tracking issue
+        ISSUE_NUM=$(gh issue create \
+            --title "rpod: experiment results tracker" \
+            --label "rpod-results" \
+            --body "Auto-created by rpod. Training results will be posted as comments." \
+            --json number -q '.number' 2>/dev/null || true)
+    fi
+
+    if [ -n "$ISSUE_NUM" ]; then
+        gh issue comment "$ISSUE_NUM" --body "### $title
+$body
+\`$(date)\`" 2>/dev/null || true
+        log "Result posted to issue #$ISSUE_NUM"
+    else
+        log "Could not post notification (gh issue failed)"
+    fi
+}
+
+# Extract bpb from a log file (checks sliding, then roundtrip, then any val_bpb)
+extract_bpb() {
+    local logfile="$1"
+    local bpb=""
+    bpb=$(grep "sliding_exact" "$logfile" 2>/dev/null | tail -1 | grep -o 'val_bpb:[0-9.]*' | cut -d: -f2)
+    [ -z "$bpb" ] && bpb=$(grep "roundtrip_exact" "$logfile" 2>/dev/null | tail -1 | grep -o 'val_bpb:[0-9.]*' | cut -d: -f2)
+    [ -z "$bpb" ] && bpb=$(grep "val_bpb:" "$logfile" 2>/dev/null | tail -1 | grep -o 'val_bpb:[0-9.]*' | cut -d: -f2)
+    echo "${bpb:-unknown}"
+}
+
 # Live countdown timer — runs in background, killed when training ends
 _TIMER_PID=""
 start_timer() {
@@ -266,7 +304,13 @@ cmd_train_ipa_bpe() {
     [ -f "final_model.int8.ptz" ] && \
         cp final_model.int8.ptz "$ARTIFACTDIR/ipa_bpe_${TIMESTAMP}.int8.ptz"
 
-    log "IPA-BPE training done. Log: $LOGFILE"
+    local BPB=$(extract_bpb "$LOGFILE")
+    log "IPA-BPE training done. val_bpb=$BPB Log: $LOGFILE"
+    notify "IPA-BPE Training Complete" "**val_bpb: $BPB**
+- Steps: $(grep 'stopping_early\|step:.*val_bpb' "$LOGFILE" | tail -1)
+- Model size: $(grep 'Total submission size int8' "$LOGFILE" | tail -1)
+- Log: \`$LOGFILE\`"
+    cmd_push
 }
 
 cmd_smoke() {
@@ -331,7 +375,11 @@ cmd_train() {
     [ -f "final_model.int8.ptz" ] && \
         cp final_model.int8.ptz "$ARTIFACTDIR/ipa_full_${TIMESTAMP}.int8.ptz"
 
-    log "Training done. Log: $LOGFILE"
+    local BPB=$(extract_bpb "$LOGFILE")
+    log "Training done. val_bpb=$BPB Log: $LOGFILE"
+    notify "IPA Char-Level Training Complete" "**val_bpb: $BPB**
+- Log: \`$LOGFILE\`"
+    cmd_push
 }
 
 cmd_baseline() {
@@ -362,7 +410,11 @@ cmd_baseline() {
     [ -f "final_model.int8.ptz" ] && \
         cp final_model.int8.ptz "$ARTIFACTDIR/baseline_${TIMESTAMP}.int8.ptz"
 
-    log "Baseline done. Log: $LOGFILE"
+    local BPB=$(extract_bpb "$LOGFILE")
+    log "Baseline done. val_bpb=$BPB Log: $LOGFILE"
+    notify "BPE Baseline Complete" "**val_bpb: $BPB**
+- Log: \`$LOGFILE\`"
+    cmd_push
 }
 
 cmd_all() {
