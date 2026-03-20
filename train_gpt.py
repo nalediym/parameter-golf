@@ -554,11 +554,17 @@ def load_data_shard(file: Path) -> Tensor:
         tokens_np = np.fromfile(file, dtype="<u2", count=num_tokens, offset=header_bytes)
         return torch.from_numpy(tokens_np.astype(np.uint16, copy=False))
     elif version == 2:
-        # IPA uint8 shards
-        tokens_np = np.fromfile(file, dtype=np.uint8, count=num_tokens, offset=header_bytes)
-        if tokens_np.size != num_tokens:
-            raise ValueError(f"Short read for {file}")
-        return torch.from_numpy(tokens_np.astype(np.int64, copy=False))
+        # IPA shards with original byte count in header[3].
+        # Detect uint8 vs uint16 from file size.
+        payload_bytes = file.stat().st_size - header_bytes
+        if payload_bytes == num_tokens * 2:
+            tokens_np = np.fromfile(file, dtype="<u2", count=num_tokens, offset=header_bytes)
+            return torch.from_numpy(tokens_np.astype(np.uint16, copy=False))
+        else:
+            tokens_np = np.fromfile(file, dtype=np.uint8, count=num_tokens, offset=header_bytes)
+            if tokens_np.size != num_tokens:
+                raise ValueError(f"Short read for {file}")
+            return torch.from_numpy(tokens_np.astype(np.int64, copy=False))
     else:
         raise ValueError(f"Unknown shard version {version} in {file}")
 
