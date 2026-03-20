@@ -316,6 +316,13 @@ def eval_val_sliding(
                      if min(ws + seq_len, total_tokens) - ws >= stride]
     total_windows = len(window_starts)
 
+    # Precompute total scorable tokens for progress log bpb in IPA mode
+    total_scorable_tokens = sum(
+        min(ws + seq_len, total_tokens) - ws if ws == 0
+        else stride
+        for ws in window_starts
+    )
+
     my_s = (total_windows * rank) // world_size
     my_e = (total_windows * (rank + 1)) // world_size
     my_windows = window_starts[my_s:my_e]
@@ -368,8 +375,13 @@ def eval_val_sliding(
                 pct = done / len(my_windows) * 100
                 running_bpb = 0.0
                 if token_count.item() > 0:
-                    rl = (loss_sum / token_count).item()
-                    running_bpb = rl / math.log(2.0) * (token_count.item() / byte_count.item())
+                    if override_byte_count > 0:
+                        # IPA mode: pro-rate original bytes by fraction of tokens scored
+                        frac = token_count.item() / total_scorable_tokens
+                        running_bpb = loss_sum.item() / (override_byte_count * frac * math.log(2.0))
+                    else:
+                        rl = (loss_sum / token_count).item()
+                        running_bpb = rl / math.log(2.0) * (token_count.item() / byte_count.item())
                 print(f"  sliding_eval [{pct:5.1f}%] {done}/{len(my_windows)} windows running_bpb={running_bpb:.6f}", flush=True)
 
     if dist.is_available() and dist.is_initialized():
