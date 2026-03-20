@@ -401,7 +401,7 @@ cmd_train_ipa_bpe() {
     local LOGFILE="$LOGDIR/train_ipa_bpe_${TIMESTAMP}.log"
 
     log "=== IPA-BPE training (${GPUS}xGPU, ${MAX_WALLCLOCK_SECONDS:-600}s) ==="
-    start_timer "IPA-BPE training" "${MAX_WALLCLOCK_SECONDS:-600}"
+    start_timer "IPA-BPE training" "$((${MAX_WALLCLOCK_SECONDS:-600} * 2))"
 
     local rc=0
     RUN_ID="ipa_bpe_${TIMESTAMP}" \
@@ -470,7 +470,7 @@ cmd_train() {
     local LOGFILE="$LOGDIR/train_ipa_${TIMESTAMP}.log"
 
     log "=== Full IPA training (${GPUS}xGPU, ${MAX_WALLCLOCK_SECONDS:-600}s) ==="
-    start_timer "IPA training" "${MAX_WALLCLOCK_SECONDS:-600}"
+    start_timer "IPA training" "$((${MAX_WALLCLOCK_SECONDS:-600} * 2))"
 
     local rc=0
     RUN_ID="ipa_full_${TIMESTAMP}" \
@@ -509,7 +509,7 @@ cmd_baseline() {
     local LOGFILE="$LOGDIR/baseline_${TIMESTAMP}.log"
 
     log "=== BPE baseline + sliding window (${GPUS}xGPU) ==="
-    start_timer "Baseline" "${MAX_WALLCLOCK_SECONDS:-600}"
+    start_timer "Baseline" "$((${MAX_WALLCLOCK_SECONDS:-600} * 2))"
 
     local rc=0
     RUN_ID="baseline_${TIMESTAMP}" \
@@ -544,7 +544,7 @@ cmd_train_seq2048() {
     local LOGFILE="$LOGDIR/train_seq2048_${TIMESTAMP}.log"
 
     log "=== IPA-BPE + seq=2048 (${GPUS}xGPU) ==="
-    start_timer "seq2048 training" "${MAX_WALLCLOCK_SECONDS:-600}"
+    start_timer "seq2048 training" "$((${MAX_WALLCLOCK_SECONDS:-600} * 2))"
 
     local rc=0
     RUN_ID="ipa_bpe_seq2048_${TIMESTAMP}" \
@@ -582,7 +582,7 @@ cmd_train_loop() {
     local LOGFILE="$LOGDIR/train_loop_${TIMESTAMP}.log"
 
     log "=== IPA-BPE + seq=2048 + 5 layers × 2 loops (${GPUS}xGPU) ==="
-    start_timer "loop training" "${MAX_WALLCLOCK_SECONDS:-600}"
+    start_timer "loop training" "$((${MAX_WALLCLOCK_SECONDS:-600} * 2))"
 
     local rc=0
     RUN_ID="ipa_bpe_loop_${TIMESTAMP}" \
