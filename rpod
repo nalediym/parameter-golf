@@ -184,6 +184,112 @@ cmd_status() {
     fi
 }
 
+cmd_preflight() {
+    echo "=== PREFLIGHT CHECK ==="
+    local ERRORS=0
+
+    # 1. Branch
+    echo -n "Branch:        "
+    if echo "$BRANCH" | grep -q "exp/"; then
+        echo "OK ($BRANCH)"
+    else
+        echo "WARN — not on an experiment branch ($BRANCH)"
+    fi
+
+    # 2. GPU
+    echo -n "GPU:           "
+    local GPUS=$(detect_gpus)
+    if [ "$GPUS" -gt 0 ]; then
+        echo "OK (${GPUS}x GPU detected)"
+    else
+        echo "FAIL — no GPU found"
+        ERRORS=$((ERRORS + 1))
+    fi
+
+    # 3. BPE tokenizer (source for decoding shards)
+    echo -n "BPE tokenizer: "
+    if [ -f "data/tokenizers/fineweb_1024_bpe.model" ]; then
+        echo "OK"
+    else
+        echo "FAIL — run: python3 data/cached_challenge_fineweb.py --variant sp1024 --train-shards 1"
+        ERRORS=$((ERRORS + 1))
+    fi
+
+    # 4. IPA-BPE tokenizer
+    echo -n "IPA-BPE tok:   "
+    if [ -f "data/tokenizers/ipa_bpe_1024.model" ]; then
+        echo "OK"
+    else
+        echo "FAIL — missing data/tokenizers/ipa_bpe_1024.model"
+        ERRORS=$((ERRORS + 1))
+    fi
+
+    # 5. BPE source shards (for conversion)
+    echo -n "BPE shards:    "
+    local BPE_SHARDS=$(ls data/datasets/fineweb10B_sp1024/fineweb_train_*.bin 2>/dev/null | wc -l | tr -d ' ')
+    local BPE_VAL=$(ls data/datasets/fineweb10B_sp1024/fineweb_val_*.bin 2>/dev/null | wc -l | tr -d ' ')
+    if [ "$BPE_SHARDS" -gt 0 ] && [ "$BPE_VAL" -gt 0 ]; then
+        echo "OK ($BPE_SHARDS train + $BPE_VAL val)"
+    else
+        echo "FAIL — run: python3 data/cached_challenge_fineweb.py --variant sp1024 --train-shards 1"
+        ERRORS=$((ERRORS + 1))
+    fi
+
+    # 6. IPA-BPE converted shards
+    echo -n "IPA-BPE shards:"
+    local IPA_TRAIN=$(ls data/datasets/fineweb10B_ipa_bpe/fineweb_train_*.bin 2>/dev/null | wc -l | tr -d ' ')
+    local IPA_VAL=$(ls data/datasets/fineweb10B_ipa_bpe/fineweb_val_*.bin 2>/dev/null | wc -l | tr -d ' ')
+    if [ "$IPA_TRAIN" -gt 0 ] && [ "$IPA_VAL" -gt 0 ]; then
+        echo " OK ($IPA_TRAIN train + $IPA_VAL val)"
+    else
+        echo " MISSING — run: ./rpod convert-ipa-bpe 1"
+        ERRORS=$((ERRORS + 1))
+    fi
+
+    # 7. Key scripts exist
+    echo -n "train_gpt.py:  "
+    if [ -f "train_gpt.py" ]; then
+        echo "OK ($(wc -l < train_gpt.py | tr -d ' ') lines)"
+    else
+        echo "FAIL — train_gpt.py missing!"
+        ERRORS=$((ERRORS + 1))
+    fi
+
+    # 8. Converter
+    echo -n "Shard convert: "
+    if [ -f "convert_fineweb_to_ipa_bpe_shards.py" ]; then
+        echo "OK"
+    else
+        echo "FAIL — convert_fineweb_to_ipa_bpe_shards.py missing"
+        ERRORS=$((ERRORS + 1))
+    fi
+
+    # 9. IPA converter + exceptions
+    echo -n "IPA converter: "
+    if [ -f "minimal_ipa_converter.py" ] && [ -f "data/ipa_exceptions_2k.json" ]; then
+        echo "OK"
+    else
+        echo "FAIL — minimal_ipa_converter.py or exceptions missing"
+        ERRORS=$((ERRORS + 1))
+    fi
+
+    # 10. Tests
+    echo -n "Tests:         "
+    if [ -f "tests/test_ipa_converter.py" ] && [ -f "tests/test_ipa_pipeline.py" ]; then
+        echo "OK (2 test files)"
+    else
+        echo "WARN — test files missing"
+    fi
+
+    echo ""
+    if [ "$ERRORS" -eq 0 ]; then
+        echo "PREFLIGHT PASSED — ready to train"
+    else
+        echo "PREFLIGHT FAILED — $ERRORS issue(s) to fix"
+    fi
+    return $ERRORS
+}
+
 cmd_pr() {
     if [ "$BRANCH" = "main" ]; then
         echo "Can't create PR from main. Switch to a feature branch first."
@@ -203,12 +309,27 @@ cmd_pr() {
 
 cmd_setup() {
     log "=== SETUP ==="
-    git fetch origin
-    git checkout "$BRANCH"
-    git pull origin "$BRANCH"
+
+    # Install gh CLI if missing (RunPod pods lose it on restart)
+    if ! command -v gh &>/dev/null; then
+        log "Installing gh CLI..."
+        curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg | dd of=/usr/share/keyrings/githubcli-archive-keyring.gpg 2>/dev/null
+        echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages stable main" | tee /etc/apt/sources.list.d/github-cli.list > /dev/null
+        apt-get update -qq && apt-get install -y -qq gh > /dev/null 2>&1
+        log "gh CLI installed. Run: gh auth login"
+    fi
+
+    # Set git identity if missing
+    git config user.name 2>/dev/null || git config --global user.name "nalediym"
+    git config user.email 2>/dev/null || git config --global user.email "nalediym@users.noreply.github.com"
+    git config pull.rebase false 2>/dev/null || true
 
     # Auth git via gh
     gh auth setup-git 2>/dev/null || true
+
+    git fetch origin
+    git checkout "$BRANCH"
+    git pull origin "$BRANCH"
 
     if [ ! -d "data/datasets/fineweb10B_sp1024" ]; then
         log "Downloading FineWeb dataset..."
@@ -670,9 +791,10 @@ case "${1:-help}" in
     baseline) cmd_baseline ;;
     all)      cmd_all ;;
     convert-ipa-bpe) cmd_convert_ipa_bpe "${2:-1}" ;;
-    train-ipa-bpe)   cmd_train_ipa_bpe ;;
-    train-seq2048)    cmd_train_seq2048 ;;
-    train-loop)       cmd_train_loop ;;
+    train-ipa-bpe)   cmd_preflight && cmd_train_ipa_bpe ;;
+    preflight)        cmd_preflight ;;
+    train-seq2048)    cmd_preflight && cmd_train_seq2048 ;;
+    train-loop)       cmd_preflight && cmd_train_loop ;;
     cost)     cmd_cost ;;
     results)  cmd_results ;;
     next)     cmd_next ;;
