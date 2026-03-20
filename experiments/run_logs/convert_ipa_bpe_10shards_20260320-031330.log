@@ -1,0 +1,33 @@
+============================================================
+FINEWEB BPE -> IPA-BPE SHARD CONVERSION
+============================================================
+Source BPE tokenizer: 1024 vocab
+IPA-BPE tokenizer: 1024 vocab
+
+--- Converting 1 validation shard(s) ---
+  fineweb_val_000000.bin ... done (173.1s, 66,345,039 tokens, ratio=1.070x)
+
+--- Converting 10 training shard(s) ---
+  fineweb_train_000000.bin ... done (280.7s, 107,027,758 tokens, ratio=1.070x)
+  fineweb_train_000001.bin ... done (280.4s, 107,040,052 tokens, ratio=1.070x)
+  fineweb_train_000002.bin ... done (283.9s, 107,189,835 tokens, ratio=1.072x)
+  fineweb_train_000003.bin ... done (279.6s, 107,140,843 tokens, ratio=1.071x)
+  fineweb_train_000004.bin ... done (279.7s, 106,946,982 tokens, ratio=1.069x)
+  fineweb_train_000005.bin ... done (279.8s, 107,083,044 tokens, ratio=1.071x)
+  fineweb_train_000006.bin ... done (279.4s, 107,117,055 tokens, ratio=1.071x)
+  fineweb_train_000007.bin ... done (284.7s, 107,143,157 tokens, ratio=1.071x)
+  fineweb_train_000008.bin ... done (280.5s, 107,064,315 tokens, ratio=1.071x)
+  fineweb_train_000009.bin ... done (282.2s, 107,013,344 tokens, ratio=1.070x)
+
+============================================================
+CONVERSION SUMMARY
+============================================================
+Shards converted:      11
+Total BPE tokens:      1,062,021,846
+Total IPA-BPE tokens:  1,137,111,424
+Total original bytes:  2,592,708,822
+Token ratio vs BPE:    1.071x
+Vocab size:            1024
+Output dir:            data/datasets/fineweb10B_ipa_bpe
+
+Conversion log: data/datasets/fineweb10B_ipa_bpe/conversion_log.json

@@ -1,0 +1,8 @@
+============================================================
+FINEWEB BPE -> IPA-BPE SHARD CONVERSION
+============================================================
+Source BPE tokenizer: 1024 vocab
+IPA-BPE tokenizer: 1024 vocab
+
+--- Converting 1 validation shard(s) ---
+  fineweb_val_000000.bin ... 
