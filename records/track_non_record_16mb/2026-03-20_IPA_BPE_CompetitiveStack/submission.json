@@ -1,0 +1,14 @@
+{
+  "track": "non_record_16mb",
+  "date": "2026-03-20",
+  "name": "IPA-BPE Phonetic Tokenizer + Competitive Stack",
+  "author": "Naledi",
+  "github_id": "nalediym",
+  "blurb": "Novel phonetic tokenization (IPA-BPE) combined with int6 STE QAT, BigramHash, SmearGate, OrthoInit, MLP 3x, and tuned hyperparameters. First known phonetic tokenizer submission. Tested on 4xH100 (non-record). Model currently over 16MB budget due to MLP 3x + BigramHash — int6 export quantization needed to fit.",
+  "val_loss": 2.03540926,
+  "val_bpb": 1.20548721,
+  "hardware": "4xH100 SXM",
+  "steps": 3509,
+  "artifact_bytes_note": "19.5MB with int8+zlib — over 16MB limit. Needs int6 export to fit.",
+  "code_bytes": 65088
+}
