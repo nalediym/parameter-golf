@@ -18,3 +18,4 @@ experiments/**/data/*.bin
 __pycache__/
 *.pt
 *.ptz
+.session-log.md
