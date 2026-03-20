@@ -49,3 +49,20 @@ BPE IPA:   "ðə naɪt" → [ðə, naɪt]                    2 tokens (compact!)
 **Papers:** LLM.int8() (Dettmers et al), GPTQ (Frantar et al), QLoRA (Dettmers et al)
 **Risk:** 16 values might be too coarse for 10min training. Need to test if quality loss > parameter gain.
 **Priority:** High — could be the differentiator for leaderboard.
+
+## Research: int2 / Ternary / Binary Quantization
+**What:** Explore extreme low-bit quantization (1-2 bits) to maximize parameter count in 16MB.
+**Why:** int2 = 2 bits (4 values), binary = 1 bit (2 values). Could fit 20-40M parameters vs 10M with int8.
+**Successful implementations:**
+- **BinaryConnect / BinaryNet** (Courbariaux et al, 2015-2016) — First binary weights, {-1, +1}, trained MNIST/CIFAR successfully
+- **Ternary Weight Networks** (Li et al, 2016) — {-1, 0, +1}, 2x compression vs binary, better accuracy
+- **XNOR-Net** (Rastegari et al, 2016) — Binary weights + activations, efficient inference on mobile
+- **BitNet** (Microsoft, 2023) — 1.58-bit (ternary with scaling), matches fp16 on large models, now in transformers
+- **DBQ** (Differential Binary Quantization, 2023) — Learnable thresholds for binary/ternary
+**Key insight:** Binary/ternary works better at scale. Small models (10M params) suffer more from quantization than large ones (1B+).
+**For 16MB constraint:**
+- Binary: ~80M parameters possible (but likely untrainable in 10min)
+- Ternary: ~40M parameters (maybe viable?)
+- int2 with learned thresholds: ~40M parameters, more flexible than ternary
+**Risk:** Extreme quantization noise may prevent convergence in 10-minute training window.
+**Priority:** Medium-High — high risk/high reward. Test after int4 experiments.
